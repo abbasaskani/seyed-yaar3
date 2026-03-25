@@ -339,7 +339,7 @@ def _try_copernicus_layers(
 
     tmpdir = Path(os.getenv("SEYDYAAR_TMPDIR", ".seydyaar_tmp"))
     tmpdir.mkdir(parents=True, exist_ok=True)
-    log_dir = Path(os.getenv("SEYDYAAR_LOG_DIR", "latest/logs"))
+    log_dir = Path(os.getenv("SEYDYAAR_LOG_DIR", "docs/latest/logs"))
     log_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = log_dir / "download_manifest.jsonl"
 

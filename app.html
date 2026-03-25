@@ -58,21 +58,16 @@
       <div class="row">
         <label class="lbl" id="lblModel">Model</label>
         <select id="modelSelect">
-          <option value="ensemble">Ensemble (default)</option>
-          <option value="scoring">Scoring</option>
+          <option value="scoring" selected>Scoring</option>
           <option value="frontplus">Front+ (Scoring)</option>
-          <option value="ppp">MaxEnt/PPP</option>
         </select>
       </div>
 
       <div class="row">
         <label class="lbl" id="lblMap">Map</label>
         <select id="mapSelect">
-          <option value="pcatch">Pcatch (Habitat×Ops)</option>
-          <option value="phab">Habitat Suitability</option>
-          <option value="pops">Operational Feasibility</option>
-          <option value="agree">Agreement (ensemble)</option>
-          <option value="spread">Spread/Std (ensemble)</option>
+          <option value="phab" selected>Habitat Suitability</option>
+          <option value="front">Front Intensity</option>
           <option value="conf">Confidence / Opacity</option>
         </select>
       </div>
@@ -82,8 +77,6 @@
         <select id="aggSelect">
           <option value="p90" selected>P90 (default)</option>
           <option value="mean">Mean</option>
-          <option value="median">Median</option>
-          <option value="max">Max</option>
         </select>
       </div>
 
@@ -101,8 +94,8 @@
       <div class="row two">
         <button id="playBtn" class="btnPrimary">▶ Play</button>
         <select id="stepSelect">
-          <option value="6" selected>6h</option>
-          <option value="12">12h</option>
+          <option value="6">6h</option>
+          <option value="12" selected>12h</option>
           <option value="24">24h</option>
         </select>
       </div>
