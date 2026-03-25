@@ -41,7 +41,7 @@ class HabitatInputs:
     sst_c: np.ndarray
     chl_mg_m3: np.ndarray
     current_m_s: np.ndarray
-    waves_hs_m: np.ndarray | None = None
+    waves_hs_m: np.ndarray
     ssh_m: np.ndarray
     front_fused: np.ndarray | None = None
     eke: np.ndarray | None = None
@@ -61,8 +61,7 @@ def habitat_scoring(inputs: HabitatInputs, priors: Dict, weights: Dict) -> Tuple
     s_temp = score_temp_c(inputs.sst_c, priors["sst_opt_c"], priors["sst_sigma_c"])
     s_chl = score_chl_mg_m3(inputs.chl_mg_m3, priors["chl_opt_mg_m3"], priors["chl_sigma_log10"])
     s_cur = score_current_m_s(inputs.current_m_s, priors["current_opt_m_s"], priors["current_sigma_m_s"])
-    use_waves = (inputs.waves_hs_m is not None) and (float(weights.get("waves", 0.0)) > 0.0)
-    s_waves = score_waves_hs(inputs.waves_hs_m, priors.get("waves_hs_soft_max_m", 1.5)) if use_waves else np.zeros_like(s_cur, dtype=np.float32)
+    s_waves = score_waves_hs(inputs.waves_hs_m, priors.get("waves_hs_soft_max_m", 1.5))
 
     tf = cf = sf = None
     if inputs.front_fused is not None:
