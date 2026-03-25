@@ -128,26 +128,15 @@ $("sheetHandle")?.addEventListener("click", ()=>{
 /* ------------------------------
    Data loading (meta + binaries)
 ------------------------------ */
-const _savedSpecies = localStorage.getItem("species") || "skipjack";
-const _savedModelRaw = localStorage.getItem("model") || "scoring";
-const _savedMapRaw = localStorage.getItem("map") || "phab";
-const _savedAggRaw = localStorage.getItem("agg") || "p90";
-const _savedModel = (["scoring","frontplus"].includes(_savedModelRaw) ? _savedModelRaw : "scoring");
-const _savedMap = (["phab","front","conf"].includes(_savedMapRaw) ? _savedMapRaw : "phab");
-const _savedAgg = (["p90","mean"].includes(_savedAggRaw) ? _savedAggRaw : "p90");
-if(_savedModel !== _savedModelRaw) localStorage.setItem("model", _savedModel);
-if(_savedMap !== _savedMapRaw) localStorage.setItem("map", _savedMap);
-if(_savedAgg !== _savedAggRaw) localStorage.setItem("agg", _savedAgg);
-
 const state = {
   index: null,
   runId: null,
   runPath: null,
   variant: "gapfill",
-  species: _savedSpecies,
-  model: _savedModel,
-  map: _savedMap,
-  agg: _savedAgg,
+  species: localStorage.getItem("species") || "skipjack",
+  model: localStorage.getItem("model") || "ensemble",
+  map: localStorage.getItem("map") || "pcatch",
+  agg: localStorage.getItem("agg") || "p90",
   times: [],
   t0: null,
   t1: null,
@@ -681,7 +670,7 @@ async function showPointPopup(lat, lon, metaInfo){
       state._layerCache = state._layerCache || {};
       state._layerCache[timeId] = state._layerCache[timeId] || {};
 
-      const wantKeys = ["phab_scoring","phab_frontplus","front","conf"];
+      const wantKeys = ["pcatch_ensemble","phab_scoring","pops"];
       const parts = [];
       for(const key of wantKeys){
         const tpl = state.meta.paths.per_time[key];
@@ -1242,12 +1231,15 @@ async function scanTimeIdsFromTimesDir(){
 }
 
 function currentPerTimeKey(){
-  const mapKey = $("mapSelect")?.value || "phab";
-  const modelKey = $("modelSelect")?.value || "scoring";
+  const mapKey = $("mapSelect")?.value || "pcatch";
+  const modelKey = $("modelSelect")?.value || "ensemble";
+  if(mapKey==="pcatch") return `pcatch_${modelKey}`;
   if(mapKey==="phab") return (modelKey==="frontplus") ? "phab_frontplus" : "phab_scoring";
-  if(mapKey==="front") return "front";
+  if(mapKey==="pops") return "pops";
+  if(mapKey==="agree") return "agree";
+  if(mapKey==="spread") return "spread";
   if(mapKey==="conf") return "conf";
-  return (modelKey==="frontplus") ? "phab_frontplus" : "phab_scoring";
+  return `pcatch_${modelKey}`;
 }
 
 async function filterTimeIdsByExistingLayer(timeIds){
@@ -1868,13 +1860,6 @@ async function computeAndRender(){
   localStorage.setItem("map", state.map);
   localStorage.setItem("agg", state.agg);
 
-  if(!state.grid || !Number.isFinite(state.grid.width) || !Number.isFinite(state.grid.height)){
-    throw new Error("Run metadata/grid is not loaded yet. latest/meta_index.json or species meta.json is missing.");
-  }
-  if(!Array.isArray(state.timeIsos) || !state.timeIsos.length){
-    throw new Error("No forecast times are available yet for the selected run/species.");
-  }
-
   const timeIsos = getSelectedTimes();
   const mapKey = $("mapSelect").value;
   const modelKey = $("modelSelect").value;
@@ -1885,14 +1870,20 @@ async function computeAndRender(){
   async function loadLayerForTime(timeIso){
     const tid = timeIdFromIso(timeIso);
     let key = null;
-    if(mapKey==="phab"){
+    if(mapKey==="pcatch"){
+      key = `pcatch_${modelKey}`;
+    }else if(mapKey==="phab"){
       key = (modelKey==="frontplus") ? "phab_frontplus" : "phab_scoring";
-    }else if(mapKey==="front"){
-      key = "front";
+    }else if(mapKey==="pops"){
+      key = "pops";
+    }else if(mapKey==="agree"){
+      key = "agree";
+    }else if(mapKey==="spread"){
+      key = "spread";
     }else if(mapKey==="conf"){
       key = "conf";
     }else{
-      key = (modelKey==="frontplus") ? "phab_frontplus" : "phab_scoring";
+      key = `pcatch_${modelKey}`;
     }
     const tpl = state.meta.paths.per_time[key];
     if(!tpl || typeof tpl !== "string"){
@@ -1943,34 +1934,21 @@ async function computeAndRender(){
    Run/variant/species meta wiring
 ------------------------------ */
 async function resolveLatestBase(){
-  const rawCandidates = [
-    "docs/latest",
-    "./docs/latest",
-    "../docs/latest",
+  const candidates = [
     "latest",
     "./latest",
     "../latest",
   ];
-  const candidates = Array.from(new Set(rawCandidates.map(x => x.replace(/\/$/,""))));
   let lastErr = null;
-  let best = null;
   for (const base of candidates) {
-    const metaIndexUrl = `${base}/meta_index.json`;
+    const url = `${base.replace(/\/$/,"")}/meta_index.json`;
     try {
-      const data = await fetchJson(metaIndexUrl);
-      const run = data?.runs?.find?.(r => r?.path) || data?.runs?.[data?.runs?.length-1] || null;
-      if(run?.path){
-        state.latestBase = base;
-        return data;
-      }
-      if(!best) best = { base, data };
+      const data = await fetchJson(url);
+      state.latestBase = base.replace(/\/$/,"");
+      return data;
     } catch (err) {
       lastErr = err;
     }
-  }
-  if(best){
-    state.latestBase = best.base;
-    return best.data;
   }
   throw lastErr || new Error("Could not resolve latest/meta_index.json");
 }
@@ -2051,6 +2029,7 @@ async function loadSpeciesMetaAndInit(){
   state.timeIds = await filterTimeIdsByExistingLayer(availableTimeIds);
   // keep derived ISO list in sync
   state.times = state.timeIds.map(timeIdToIso);
+  state.timeIsos = state.times.slice();
   state.isoToTimeId = {};
   for(let i=0;i<state.times.length;i++){ state.isoToTimeId[state.times[i]] = state.timeIds[i]; }
 
@@ -2633,16 +2612,11 @@ $("exportFbBtn").addEventListener("click", async ()=>{
 initMap();
 // Ensure tiles render even if the layout/CSS loads slightly later
 setTimeout(()=>{ try{ map?.invalidateSize(true); }catch(_){} }, 120);
-const analyzeBtn = $("analyzeBtn");
-if (analyzeBtn) analyzeBtn.disabled = true;
-refreshMeta().then(()=>{
-  if (analyzeBtn) analyzeBtn.disabled = false;
-}).catch(err=>{
+refreshMeta().catch(err=>{
   console.error(err);
-  if (analyzeBtn) analyzeBtn.disabled = true;
-  toast(lang==="fa" ? "فایل latest/meta_index.json در ریشهٔ پروژه پیدا نشد. اول باید backend را با --out latest اجرا کنی تا latest/ ساخته شود." : "latest/meta_index.json was not found at the project root. Run the backend first with --out latest so the latest/ folder is generated.", "err", lang==="fa"?"خطا":"Error");
+  toast(lang==="fa" ? "داده‌ای در مسیر /latest پیدا نشد. اگر هنوز خروجی تولید نکردی، workflow را اجرا کن تا latest/ ساخته شود." : "No data found under /latest. If you haven't generated outputs yet, run the GitHub Action (Run generator) to create latest/.", "err", lang==="fa"?"خطا":"Error");
   const hint = $("dirtyHint");
-  if(hint) hint.textContent = (lang==="fa") ? "هنوز خروجی latest ساخته نشده است" : "latest outputs have not been generated yet";
+  if(hint) hint.textContent = (lang==="fa") ? "داده موجود نیست — ابتدا خروجی بساز" : "No data — generate outputs first";
 })
 function getSelectedTimeIndex(){
   return $("t1Select")?.selectedIndex ?? 0;
