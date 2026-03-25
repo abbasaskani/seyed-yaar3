@@ -1869,7 +1869,7 @@ async function computeAndRender(){
   localStorage.setItem("agg", state.agg);
 
   if(!state.grid || !Number.isFinite(state.grid.width) || !Number.isFinite(state.grid.height)){
-    throw new Error("Run metadata/grid is not loaded yet. docs/latest/meta_index.json or species meta.json is missing.");
+    throw new Error("Run metadata/grid is not loaded yet. latest/meta_index.json or species meta.json is missing.");
   }
   if(!Array.isArray(state.timeIsos) || !state.timeIsos.length){
     throw new Error("No forecast times are available yet for the selected run/species.");
@@ -1972,7 +1972,7 @@ async function resolveLatestBase(){
     state.latestBase = best.base;
     return best.data;
   }
-  throw lastErr || new Error("Could not resolve docs/latest/meta_index.json");
+  throw lastErr || new Error("Could not resolve latest/meta_index.json");
 }
 
 function latestUrl(rel){
@@ -2640,7 +2640,7 @@ refreshMeta().then(()=>{
 }).catch(err=>{
   console.error(err);
   if (analyzeBtn) analyzeBtn.disabled = true;
-  toast(lang==="fa" ? "فایل docs/latest/meta_index.json پیدا نشد. اول باید backend را با --out docs/latest اجرا کنی تا پوشه docs/latest ساخته شود." : "docs/latest/meta_index.json was not found. Run the backend first with --out docs/latest so the docs/latest folder is generated.", "err", lang==="fa"?"خطا":"Error");
+  toast(lang==="fa" ? "فایل latest/meta_index.json در ریشهٔ پروژه پیدا نشد. اول باید backend را با --out latest اجرا کنی تا latest/ ساخته شود." : "latest/meta_index.json was not found at the project root. Run the backend first with --out latest so the latest/ folder is generated.", "err", lang==="fa"?"خطا":"Error");
   const hint = $("dirtyHint");
   if(hint) hint.textContent = (lang==="fa") ? "هنوز خروجی latest ساخته نشده است" : "latest outputs have not been generated yet";
 })

@@ -62,7 +62,7 @@ async function loadMeta(){
     }catch(_){ /* ignore */ }
 
     if(!info){
-      const r = await fetch("./docs/latest/meta_index.json", {cache:"no-store"});
+      const r = await fetch("./latest/meta_index.json", {cache:"no-store"});
       const idx = await r.json();
       const latest = idx.latest_run_id;
       const run = idx.runs.find(x=>x.run_id===latest);
