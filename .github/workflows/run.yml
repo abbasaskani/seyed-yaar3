@@ -9,13 +9,14 @@ permissions:
   contents: write
 
 concurrency:
-  group: seydyaar-run-main
+  group: seydyaar-daily-main
   cancel-in-progress: false
 
 jobs:
   run:
     runs-on: ubuntu-24.04
     env:
+      COPERNICUSMARINE_LOG_LEVEL: INFO
       COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
       COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
       COPERNICUS_MARINE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
@@ -25,6 +26,7 @@ jobs:
       SEYDYAAR_LOG_DIR: "docs/latest/logs"
       SEYDYAAR_VERIFY_DIR: "docs/latest/verify"
       PYTHONUNBUFFERED: "1"
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,12 +39,12 @@ jobs:
           cache-dependency-path: |
             backend/requirements.txt
 
-      - name: Check Copernicus secrets
+      - name: Validate Copernicus credentials
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${COPERNICUSMARINE_SERVICE_USERNAME:-}" || { echo "Missing secret: COPERNICUSMARINE_SERVICE_USERNAME"; exit 1; }
-          test -n "${COPERNICUSMARINE_SERVICE_PASSWORD:-}" || { echo "Missing secret: COPERNICUSMARINE_SERVICE_PASSWORD"; exit 1; }
+          test -n "${COPERNICUSMARINE_SERVICE_USERNAME:-}" || { echo "missing COPERNICUSMARINE_SERVICE_USERNAME"; exit 1; }
+          test -n "${COPERNICUSMARINE_SERVICE_PASSWORD:-}" || { echo "missing COPERNICUSMARINE_SERVICE_PASSWORD"; exit 1; }
 
       - name: Install
         run: |
@@ -50,21 +52,25 @@ jobs:
           pip install -r backend/requirements.txt
           pip install -U copernicusmarine
 
-      - name: Prepare latest dirs (always create non-hidden files so artifacts never fail)
+      - name: Prepare latest dirs
         run: |
           rm -rf docs/latest/runs/main || true
           rm -rf docs/latest/verify || true
           rm -rf docs/latest/logs || true
           mkdir -p docs/latest/logs docs/latest/verify
-          echo "keep" > docs/latest/logs/keep.txt
-          echo "keep" > docs/latest/verify/keep.txt
 
       - name: Run daily
         shell: bash
         run: |
           set -euo pipefail
           export PYTHONPATH="$GITHUB_WORKSPACE/backend"
-          python -m seydyaar run-daily             --out docs/latest             --past-days "${SEYDYAAR_PAST_DAYS:-1}"             --future-days "${SEYDYAAR_FUTURE_DAYS:-5}"             --step-hours "${SEYDYAAR_STEP_HOURS:-12}"             --grid "${SEYDYAAR_GRID:-160x160}"             --species "${SEYDYAAR_SPECIES:-skipjack}"
+          python -m seydyaar run-daily \
+            --out docs/latest \
+            --past-days "${SEYDYAAR_PAST_DAYS:-1}" \
+            --future-days "${SEYDYAAR_FUTURE_DAYS:-5}" \
+            --step-hours "${SEYDYAAR_STEP_HOURS:-12}" \
+            --grid "${SEYDYAAR_GRID:-160x160}" \
+            --species "${SEYDYAAR_SPECIES:-skipjack}"
 
       - name: Upload logs + verify
         if: always()
@@ -78,25 +84,19 @@ jobs:
           include-hidden-files: true
           retention-days: 7
 
-      - name: Commit latest
+      - name: Commit docs/latest
         if: success()
-        shell: bash
         run: |
           set -euo pipefail
-
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
           git add docs/latest
           git diff --cached --quiet && { echo "No changes to commit"; exit 0; }
-
           git commit -m "Update docs/latest (auto)"
-
           for i in 1 2 3; do
             git fetch origin main
             git rebase origin/main && break
             git rebase --abort || true
             sleep 5
           done
-
           git push origin HEAD:main

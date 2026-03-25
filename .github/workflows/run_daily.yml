@@ -1,4 +1,4 @@
-name: Run daily + publish docs (rewrite + verify, v5)
+name: Run daily + publish docs (rewrite + verify, v4)
 
 on:
   workflow_dispatch:
@@ -52,12 +52,12 @@ jobs:
           cache-dependency-path: |
             backend/requirements.txt
 
-      - name: Check Copernicus secrets
+      - name: Validate Copernicus credentials
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${COPERNICUSMARINE_SERVICE_USERNAME:-}" || { echo "Missing secret: COPERNICUSMARINE_SERVICE_USERNAME"; exit 1; }
-          test -n "${COPERNICUSMARINE_SERVICE_PASSWORD:-}" || { echo "Missing secret: COPERNICUSMARINE_SERVICE_PASSWORD"; exit 1; }
+          test -n "${COPERNICUSMARINE_SERVICE_USERNAME:-}" || { echo "missing COPERNICUSMARINE_SERVICE_USERNAME"; exit 1; }
+          test -n "${COPERNICUSMARINE_SERVICE_PASSWORD:-}" || { echo "missing COPERNICUSMARINE_SERVICE_PASSWORD"; exit 1; }
 
       - name: Install deps
         run: |
@@ -71,8 +71,6 @@ jobs:
           rm -rf docs/latest/verify || true
           rm -rf docs/latest/logs || true
           mkdir -p docs/latest/logs docs/latest/verify
-          echo "keep" > docs/latest/logs/keep.txt
-          echo "keep" > docs/latest/verify/keep.txt
 
       - name: Run pipeline
         shell: bash
@@ -104,23 +102,17 @@ jobs:
 
       - name: Commit & push updated docs
         if: success()
-        shell: bash
         run: |
           set -euo pipefail
-
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
           git add docs/latest
           git diff --cached --quiet && { echo "No changes to commit"; exit 0; }
-
           git commit -m "Update docs/latest (auto)"
-
           for i in 1 2 3; do
             git fetch origin main
             git rebase origin/main && break
             git rebase --abort || true
             sleep 5
           done
-
           git push origin HEAD:main

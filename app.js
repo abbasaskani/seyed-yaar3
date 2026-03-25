@@ -134,8 +134,8 @@ const state = {
   runPath: null,
   variant: "gapfill",
   species: localStorage.getItem("species") || "skipjack",
-  model: localStorage.getItem("model") || "ensemble",
-  map: localStorage.getItem("map") || "pcatch",
+  model: localStorage.getItem("model") || "scoring",
+  map: localStorage.getItem("map") || "phab",
   agg: localStorage.getItem("agg") || "p90",
   times: [],
   t0: null,
@@ -1231,15 +1231,15 @@ async function scanTimeIdsFromTimesDir(){
 }
 
 function currentPerTimeKey(){
-  const mapKey = $("mapSelect")?.value || "pcatch";
-  const modelKey = $("modelSelect")?.value || "ensemble";
+  const mapKey = $("mapSelect")?.value || "phab";
+  const modelKey = $("modelSelect")?.value || "scoring";
   if(mapKey==="pcatch") return `pcatch_${modelKey}`;
   if(mapKey==="phab") return (modelKey==="frontplus") ? "phab_frontplus" : "phab_scoring";
   if(mapKey==="pops") return "pops";
   if(mapKey==="agree") return "agree";
   if(mapKey==="spread") return "spread";
   if(mapKey==="conf") return "conf";
-  return `pcatch_${modelKey}`;
+  return "phab_scoring";
 }
 
 async function filterTimeIdsByExistingLayer(timeIds){
@@ -1861,8 +1861,8 @@ async function computeAndRender(){
   localStorage.setItem("agg", state.agg);
 
   const timeIsos = getSelectedTimes();
-  const mapKey = $("mapSelect").value;
-  const modelKey = $("modelSelect").value;
+  const mapKey = $("mapSelect")?.value || "phab";
+  const modelKey = $("modelSelect")?.value || "scoring";
 
   const W = state.grid.width, H = state.grid.height;
 
@@ -1883,14 +1883,19 @@ async function computeAndRender(){
     }else if(mapKey==="conf"){
       key = "conf";
     }else{
-      key = `pcatch_${modelKey}`;
+      key = "phab_scoring";
     }
-    const tpl = state.meta.paths.per_time[key];
+    let tpl = state?.meta?.paths?.per_time?.[key];
     if(!tpl || typeof tpl !== "string"){
-      console.warn("Missing layer template:", key);
+      console.warn("Missing layer template:", key, "-> fallback to phab_scoring");
+      key = "phab_scoring";
+      tpl = state?.meta?.paths?.per_time?.[key];
+    }
+    if(!tpl || typeof tpl !== "string"){
+      console.warn("Missing fallback layer template too:", key);
       return new Float32Array(W*H).fill(NaN);
     }
-    const url = latestUrl(`${state.runPath}/${tpl.replace("{time}", tid)}`);
+    const url = latestUrl(`${state.runPath}/${tpl.replace("{time}", tid).replace("{time_id}", tid)}`);
     return fetchBin(url, (key.endsWith("_u8")?"u8":"f32"));
   }
 
@@ -1935,6 +1940,9 @@ async function computeAndRender(){
 ------------------------------ */
 async function resolveLatestBase(){
   const candidates = [
+    "docs/latest",
+    "./docs/latest",
+    "../docs/latest",
     "latest",
     "./latest",
     "../latest",
@@ -1950,11 +1958,11 @@ async function resolveLatestBase(){
       lastErr = err;
     }
   }
-  throw lastErr || new Error("Could not resolve latest/meta_index.json");
+  throw lastErr || new Error("Could not resolve docs/latest/meta_index.json");
 }
 
 function latestUrl(rel){
-  const base = (state.latestBase || "latest").replace(/\/$/,"");
+  const base = (state.latestBase || "docs/latest").replace(/\/$/,"");
   return `${base}/${String(rel).replace(/^\/+/,"")}`;
 }
 
@@ -2011,6 +2019,16 @@ async function loadSpeciesMetaAndInit(){
   // species meta path:
   const url = latestUrl(`${state.runPath}/variants/${state.variant}/species/${state.species}/meta.json`);
   state.meta = await fetchJson(url);
+  try{
+    const perTime = state?.meta?.paths?.per_time || {};
+    const hasPcatch = Object.keys(perTime).some(k => k.startsWith("pcatch_"));
+    if (!hasPcatch && state.map === "pcatch") {
+      state.map = "phab";
+      state.model = "scoring";
+      if ($("mapSelect")) $("mapSelect").value = "phab";
+      if ($("modelSelect")) $("modelSelect").value = "scoring";
+    }
+  }catch(_){ }
   // run-level meta for availability reporting + deduped time catalog
   state.runMeta = await fetchJson(latestUrl(`${state.runPath}/meta.json`)).catch(()=>null);
   state.grid = state.meta.grid;
@@ -2614,7 +2632,7 @@ initMap();
 setTimeout(()=>{ try{ map?.invalidateSize(true); }catch(_){} }, 120);
 refreshMeta().catch(err=>{
   console.error(err);
-  toast(lang==="fa" ? "داده‌ای در مسیر /latest پیدا نشد. اگر هنوز خروجی تولید نکردی، workflow را اجرا کن تا latest/ ساخته شود." : "No data found under /latest. If you haven't generated outputs yet, run the GitHub Action (Run generator) to create latest/.", "err", lang==="fa"?"خطا":"Error");
+  toast(lang==="fa" ? "داده‌ای در مسیر /docs/latest پیدا نشد. اگر هنوز خروجی تولید نکردی، workflow را اجرا کن تا latest/ ساخته شود." : "No data found under /docs/latest. If you haven't generated outputs yet, run the GitHub Action (Run generator) to create latest/.", "err", lang==="fa"?"خطا":"Error");
   const hint = $("dirtyHint");
   if(hint) hint.textContent = (lang==="fa") ? "داده موجود نیست — ابتدا خروجی بساز" : "No data — generate outputs first";
 })
