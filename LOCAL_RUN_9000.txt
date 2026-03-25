@@ -1,0 +1,22 @@
+PowerShell commands
+
+# 1) backend run (from project root)
+cd "C:\Users\MorBit\Documents\GitHub\seyed-yaar2"
+
+# optional venv
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r backend\requirements.txt
+
+# make backend package importable
+$env:PYTHONPATH=(Resolve-Path .\backend).Path
+
+# lean run: skipjack only, 1 day past, 5 days future, 12h steps, 160x160
+python -m seydyaar run-daily --out latest --past-days 1 --future-days 5 --step-hours 12 --grid 160x160 --species skipjack
+
+# 2) serve UI on port 9000 from repo root
+cd "C:\Users\MorBit\Documents\GitHub\seyed-yaar2"
+python -m http.server 9000
+
+# open in browser
+http://localhost:9000/app.html
