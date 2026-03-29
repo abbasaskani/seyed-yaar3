@@ -1345,7 +1345,14 @@ let _anTimer = null;
 function scheduleAnalyze(){
   if(!$("autoAnalyzeToggle")?.checked) return;
   clearTimeout(_anTimer);
-  _anTimer = setTimeout(()=>{ try{ computeAndRender(); }catch(_){} }, 320);
+  _anTimer = setTimeout(async ()=>{
+    try{
+      if(!state.grid || !state.times?.length) return;
+      await computeAndRender();
+    }catch(err){
+      console.error("Analyze failed:", err);
+    }
+  }, 320);
 }
 
 ["gridToggle","avgToggle","aoiMode","clusterThreshold","clusterEpsKm","clusterMinPts","stepSelect","aggSelect","mapSelect","modelSelect"].forEach(id=>{
@@ -1538,28 +1545,45 @@ function setLegend(title){
   `;
 }
 
+function countFiniteValues(arr){
+  if(!arr || !arr.length) return 0;
+  let n = 0;
+  for(let i=0;i<arr.length;i++) if(Number.isFinite(arr[i])) n++;
+  return n;
+}
+
 function renderOverlay(arr01, conf01){
   const {width:W, height:H} = state.grid;
   const bounds = ensureGridBounds();
   if(!bounds || !bounds[0] || !bounds[1]){
     console.error('Invalid grid bounds; cannot render overlay', state.grid);
-    return;
+    return false;
   }
   state.canvas.width = W;
   state.canvas.height = H;
   const img = state.ctx.createImageData(W, H);
   const data = img.data;
 
-  const N = W*H;
+  let finiteCount = 0;
+  let visibleCount = 0;
+  let usedAlphaFallback = false;
+  const fallbackAlpha = 172;
 
   for(let yImg=0;yImg<H;yImg++){
-        const ySrc = state.dataNorthFirst ? yImg : (H-1 - yImg);
+    const ySrc = state.dataNorthFirst ? yImg : (H-1 - yImg);
     for(let x=0;x<W;x++){
       const iSrc = ySrc*W + x;
       const v = arr01[iSrc];
       const ok = Number.isFinite(v);
+      if(ok) finiteCount++;
       const c = ok ? colorFor(v) : [0,0,0];
-      const a = ok ? Math.round(255 * Math.min(1, Math.max(0, conf01[iSrc] ?? 1))) : 0;
+      const conf = Number.isFinite(conf01?.[iSrc]) ? conf01[iSrc] : 1;
+      let a = ok ? Math.round(255 * Math.min(1, Math.max(0, conf))) : 0;
+      if(ok && a===0){
+        a = fallbackAlpha;
+        usedAlphaFallback = true;
+      }
+      if(a > 0) visibleCount++;
       const p = (yImg*W + x)*4;
       data[p+0]=c[0];
       data[p+1]=c[1];
@@ -1567,17 +1591,31 @@ function renderOverlay(arr01, conf01){
       data[p+3]=a;
     }
   }
+
+  if(!finiteCount || !visibleCount){
+    console.warn("renderOverlay skipped: all pixels invalid/transparent", {finiteCount, visibleCount});
+    return false;
+  }
+  if(usedAlphaFallback){
+    console.warn("renderOverlay: confidence made layer fully transparent; applied alpha fallback", {finiteCount, visibleCount, fallbackAlpha});
+  }
+
   state.ctx.putImageData(img, 0, 0);
   const url = state.canvas.toDataURL("image/png");
 
-  const b = [[bounds[0][0], bounds[0][1]], [bounds[1][0], bounds[1][1]]]; // [[S,W],[N,E]]
+  const b = [[bounds[0][0], bounds[0][1]], [bounds[1][0], bounds[1][1]]];
   ensurePanes();
+  const overlayOpacity = Number.isFinite(state.overlayOpacity) ? state.overlayOpacity : 0.68;
   if(!imageOverlay){
-    imageOverlay = L.imageOverlay(url, b, {opacity: 1.0, interactive:false, pane:"rasterPane"}).addTo(map);
+    imageOverlay = L.imageOverlay(url, b, {opacity: overlayOpacity, interactive:false, pane:"rasterPane"}).addTo(map);
   }else{
     imageOverlay.setUrl(url);
     imageOverlay.setBounds(b);
+    imageOverlay.setOpacity(overlayOpacity);
   }
+  state.overlay = imageOverlay;
+  state._overlayDebug = {finiteCount, visibleCount, usedAlphaFallback, fallbackAlpha, overlayOpacity};
+  return true;
 }
 
 /* ------------------------------
@@ -1831,12 +1869,22 @@ function getTopFilter(){
 function renderFromCache(){
   if(!state.lastComputed) return;
   const {arrAgg, confAgg, timeIsos} = state.lastComputed;
-  const arrShown = applyFilterMaskToArray(arrAgg);
+  let arrShown = applyFilterMaskToArray(arrAgg);
+  let usingFiltered = true;
+  if(!countFiniteValues(arrShown) && countFiniteValues(arrAgg)){
+    console.warn("Filtered view became empty; falling back to unfiltered aggregated layer");
+    arrShown = arrAgg;
+    usingFiltered = false;
+  }
   const confShown = (confAgg && confAgg.length===arrShown.length) ? confAgg : new Float32Array(arrShown.length).fill(1);
 
   refreshStops();
-  setLegend(mapTitle());
-  renderOverlay(arrShown, confShown);
+  setLegend(mapTitle() + (usingFiltered ? "" : (lang==="fa" ? " • بدون فیلتر" : " • unfiltered fallback")));
+  const rendered = renderOverlay(arrShown, confShown);
+  if(!rendered){
+    console.warn("renderFromCache: overlay not updated because rendered layer was empty/invalid");
+    return;
+  }
 
   const {minP, lim} = getTopFilter();
   const topAll = topKFromArray(arrShown, 100);
@@ -1849,7 +1897,6 @@ function renderFromCache(){
   });
   state.lastComputed.topFiltered = topFiltered;
 
-
   const midTime = timeIsos[Math.floor(timeIsos.length/2)];
   loadCovAtPoints(midTime, topFiltered).then(covs=>renderTop10(topFiltered, covs));
 }
@@ -1860,7 +1907,15 @@ async function computeAndRender(){
   localStorage.setItem("map", state.map);
   localStorage.setItem("agg", state.agg);
 
-  const timeIsos = getSelectedTimes();
+  if(!state.grid || !Number.isFinite(state.grid.width) || !Number.isFinite(state.grid.height)){
+    throw new Error("Run metadata/grid is not loaded yet. docs/latest/meta_index.json or species meta.json is missing.");
+  }
+  const timeIsos = (typeof getSelectedTimes === "function")
+    ? getSelectedTimes()
+    : (state.times?.length ? state.times : (state.timeIsos || []));
+  if(!timeIsos?.length){
+    throw new Error("No forecast times are available yet for the selected run/species.");
+  }
   const mapKey = $("mapSelect")?.value || "phab";
   const modelKey = $("modelSelect")?.value || "scoring";
 
@@ -1896,17 +1951,22 @@ async function computeAndRender(){
       return new Float32Array(W*H).fill(NaN);
     }
     const url = latestUrl(`${state.runPath}/${tpl.replace("{time}", tid).replace("{time_id}", tid)}`);
-    return fetchBin(url, (key.endsWith("_u8")?"u8":"f32"));
+    try{
+      return await fetchBin(url, (key.endsWith("_u8")?"u8":"f32"));
+    }catch(err){
+      console.error("Layer fetch failed:", key, tid, url, err);
+      return new Float32Array(W*H).fill(NaN);
+    }
   }
 
   const arrs = await Promise.all(timeIsos.map(loadLayerForTime));
-  let aggMethod = $("aggSelect").value;
+  let aggMethod = $("aggSelect")?.value || "p90";
   // For conf map we always mean
   if(mapKey==="conf") aggMethod = "mean";
 
   const arrAgg = aggregatePerPixel(arrs, aggMethod);
 
-  try{ computeScaleAndPercentiles(arrAgg); }catch(_){}
+  try{ computeScaleAndPercentiles(arrAgg); }catch(_){ }
 
   const confAgg = (mapKey==="conf")
     ? (()=>{ // visualize confidence itself (as "prob")
@@ -1918,7 +1978,6 @@ async function computeAndRender(){
       })()
     : await getConfAggregated(timeIsos);
 
-  // render
   // cache raw (pre-filter)
   state.lastComputed = {arrAgg, confAgg, timeIsos};
 
@@ -1931,7 +1990,6 @@ async function computeAndRender(){
     state._didFit = true;
   }
 
-  // top10 from aggregated (for catch & habitat & ops)
   // Top table rendered inside renderFromCache()
 }
 
@@ -2019,16 +2077,6 @@ async function loadSpeciesMetaAndInit(){
   // species meta path:
   const url = latestUrl(`${state.runPath}/variants/${state.variant}/species/${state.species}/meta.json`);
   state.meta = await fetchJson(url);
-  try{
-    const perTime = state?.meta?.paths?.per_time || {};
-    const hasPcatch = Object.keys(perTime).some(k => k.startsWith("pcatch_"));
-    if (!hasPcatch && state.map === "pcatch") {
-      state.map = "phab";
-      state.model = "scoring";
-      if ($("mapSelect")) $("mapSelect").value = "phab";
-      if ($("modelSelect")) $("modelSelect").value = "scoring";
-    }
-  }catch(_){ }
   // run-level meta for availability reporting + deduped time catalog
   state.runMeta = await fetchJson(latestUrl(`${state.runPath}/meta.json`)).catch(()=>null);
   state.grid = state.meta.grid;
@@ -2047,7 +2095,6 @@ async function loadSpeciesMetaAndInit(){
   state.timeIds = await filterTimeIdsByExistingLayer(availableTimeIds);
   // keep derived ISO list in sync
   state.times = state.timeIds.map(timeIdToIso);
-  state.timeIsos = state.times.slice();
   state.isoToTimeId = {};
   for(let i=0;i<state.times.length;i++){ state.isoToTimeId[state.times[i]] = state.timeIds[i]; }
 
@@ -2632,9 +2679,9 @@ initMap();
 setTimeout(()=>{ try{ map?.invalidateSize(true); }catch(_){} }, 120);
 refreshMeta().catch(err=>{
   console.error(err);
-  toast(lang==="fa" ? "داده‌ای در مسیر /docs/latest پیدا نشد. اگر هنوز خروجی تولید نکردی، workflow را اجرا کن تا latest/ ساخته شود." : "No data found under /docs/latest. If you haven't generated outputs yet, run the GitHub Action (Run generator) to create latest/.", "err", lang==="fa"?"خطا":"Error");
+  toast(lang==="fa" ? "داده‌ای در مسیر /docs/latest پیدا نشد. اگر هنوز خروجی تولید نکردی، workflow را اجرا کن تا docs/latest ساخته شود." : "No data found under /docs/latest. If you haven't generated outputs yet, run the GitHub Action (Run generator) to create docs/latest/.", "err", lang==="fa"?"خطا":"Error");
   const hint = $("dirtyHint");
-  if(hint) hint.textContent = (lang==="fa") ? "داده موجود نیست — ابتدا خروجی بساز" : "No data — generate outputs first";
+  if(hint) hint.textContent = (lang==="fa") ? "داده موجود نیست — ابتدا docs/latest را بساز" : "No data — generate docs/latest first";
 })
 function getSelectedTimeIndex(){
   return $("t1Select")?.selectedIndex ?? 0;
@@ -2648,13 +2695,40 @@ function getSelectedTimeId(){
 // ---- Debug / console helpers (so claims are testable) ----
 window.state = state;
 window.__SY = window.__SY || {};
-window.__SY.version = "ui-align-v6";
+window.__SY.version = "ui-align-v15";
 window.__SY.setFlipY = (v)=>{ state.dataNorthFirst = !!v; try{ renderFromCache(); }catch(_){} }; // true => row0 NORTH
 window.__SY.setRenderFlipY = (v)=>{ state.dataNorthFirst = ! (!!v); try{ renderFromCache(); }catch(_){} }; // legacy: true => row0 SOUTH
 window.__SY.setBoundsPad = (v)=>{ state.boundsPad = !!v; try{ if(state.grid) state.grid.bounds=null; ensureGridBounds(); renderFromCache(); }catch(_){} };
 window.__SY.setOffsets = (dLat, dLon)=>{ state.manualLatOffset = Number(dLat||0); state.manualLonOffset = Number(dLon||0); try{ if(state.grid) state.grid.bounds=null; ensureGridBounds(); renderFromCache(); }catch(e){ console.error(e);} };
 window.__SY.suppress = (ms=250)=>{ suppressNextMapClick(ms); return state.__suppressMapClickUntil; };
 window.__SY.getSuppress = ()=> state.__suppressMapClickUntil;
+
+
+window.__SY.getOverlay = ()=> state.overlay || imageOverlay || null;
+window.__SY.getOverlayOpacity = ()=>{
+  const ov = state.overlay || imageOverlay || null;
+  return ov?.options?.opacity ?? null;
+};
+window.__SY.setOverlayOpacity = (x)=>{
+  const ov = state.overlay || imageOverlay || null;
+  const v = Math.max(0, Math.min(1, Number(x)));
+  if(ov && Number.isFinite(v)){
+    ov.setOpacity(v);
+    if(ov.options) ov.options.opacity = v;
+    state.overlayOpacity = v;
+  }
+  return v;
+};
+window.__SY.getOverlayStats = ()=>({
+  hasOverlay: !!(state.overlay || imageOverlay),
+  overlayOpacity: Number.isFinite(state.overlayOpacity) ? state.overlayOpacity : null,
+  lastFiniteAgg: state.lastComputed?.arrAgg ? countFiniteValues(state.lastComputed.arrAgg) : 0,
+  lastFiniteShown: state.lastComputed?.arrAgg ? countFiniteValues(applyFilterMaskToArray(state.lastComputed.arrAgg)) : 0,
+  hasFilterMask: !!state.filterMask,
+  overlayDebug: state._overlayDebug || null,
+  latestBase: state.latestBase || null,
+  currentLayer: (typeof currentPerTimeKey==="function" ? currentPerTimeKey() : null)
+});
 
 window.__SY.xyToLatLon = xyToLatLon;
 window.__SY.latLonToXY = latLonToXY;
