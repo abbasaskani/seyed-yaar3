@@ -40,3 +40,7 @@ Write heavy diagnostics too:
 ```powershell
 $env:SEYDYAAR_WRITE_DIAGNOSTICS="1"
 ```
+
+
+Canonical output path: `docs/latest`
+Compatibility alias for older UI builds: mirror `docs/latest` to root `latest/`.
