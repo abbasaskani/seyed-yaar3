@@ -20,3 +20,9 @@ python -m http.server 9000
 
 # open in browser
 http://localhost:9000/app.html
+
+
+# Optional compatibility mirror for root /latest on static hosting
+Remove-Item -Recurse -Force ".\latest" -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force ".\latest" | Out-Null
+Copy-Item -Recurse -Force ".\docs\latest\*" ".\latest\"
