@@ -1,6 +1,6 @@
 /* Seyd‑Yaar Service Worker — cache static assets, but ALWAYS refresh dynamic data (latest/ + runs/) */
 
-const CACHE = "seydyaar-v0.5.0"; // bump this when you change SW
+const CACHE = "seydyaar-v0.6.0"; // bump this when you change SW
 
 // Only STATIC assets here. ❗Do NOT pre-cache latest/* or runs/*
 const CORE = [
@@ -9,7 +9,7 @@ const CORE = [
   "./app.html",
   "./styles.css",
   "./home.js",
-  "./app.js",
+  "./app.js?v=docs-latest-v7",
   "./manifest.json",
   "./assets/logo.png"
 ];
@@ -31,6 +31,7 @@ function isDynamic(url) {
   // GitHub Pages: app is served under /<repo>/
   // We must keep latest/* and runs/* always fresh.
   return (
+    url.pathname.includes("/docs/latest/") ||
     url.pathname.includes("/latest/") ||
     url.pathname.includes("/runs/")
   );
