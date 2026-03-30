@@ -1,21 +1,29 @@
 /* Seyd‑Yaar Service Worker — cache static assets, but ALWAYS refresh dynamic data (latest/ + runs/) */
 
-const CACHE = "seydyaar-v0.6.0"; // bump this when you change SW
+const CACHE = "seydyaar-v0.6.1"; // bump this when you change SW
 
-// Only STATIC assets here. ❗Do NOT pre-cache latest/* or runs/*
+// Only STATIC assets here. Dynamic data must stay network-first.
 const CORE = [
   "./",
   "./index.html",
   "./app.html",
   "./styles.css",
   "./home.js",
-  "./app.js?v=docs-latest-v7",
+  "./app.js?v=docs-latest-v8",
   "./manifest.json",
   "./assets/logo.png"
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)));
+  event.waitUntil((async () => {
+    const c = await caches.open(CACHE);
+    await Promise.allSettled(CORE.map(async (url) => {
+      try {
+        const res = await fetch(url, { cache: "no-store" });
+        if (res && res.ok) await c.put(url, res.clone());
+      } catch (_) {}
+    }));
+  })());
   self.skipWaiting();
 });
 
@@ -28,8 +36,6 @@ self.addEventListener("activate", (event) => {
 });
 
 function isDynamic(url) {
-  // GitHub Pages: app is served under /<repo>/
-  // We must keep latest/* and runs/* always fresh.
   return (
     url.pathname.includes("/docs/latest/") ||
     url.pathname.includes("/latest/") ||
@@ -42,24 +48,20 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
 
   const url = new URL(req.url);
-
-  // Only handle same-origin requests.
   if (url.origin !== self.location.origin) return;
 
   const acceptHeader = req.headers.get("accept") || "";
   if (req.mode === "navigate" || acceptHeader.includes("text/html")) {
     event.respondWith(
-      fetch(req).catch(() => caches.match("./app.html") || caches.match("./index.html"))
+      fetch(req).catch(async () => (await caches.match("./app.html")) || (await caches.match("./index.html")) || new Response("Offline", { status: 503 }))
     );
     return;
   }
 
-  // ✅ Dynamic data: network-first (no-store)
   if (isDynamic(url)) {
     event.respondWith(
       fetch(req, { cache: "no-store" })
         .then((res) => {
-          // Only cache successful responses
           if (res && res.ok) {
             const copy = res.clone();
             caches.open(CACHE).then((c) => c.put(req, copy));
@@ -74,7 +76,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // ✅ Static assets: cache-first
   event.respondWith(
     caches.match(req).then((hit) => {
       if (hit) return hit;
