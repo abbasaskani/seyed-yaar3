@@ -49,7 +49,7 @@ from ..models.ocean_features import (
 )
 from ..models.ops import ops_feasibility
 from ..models.scoring import HabitatInputs, habitat_scoring
-from ..utils_geo import GridSpec, bbox_from_geojson, mask_from_geojson
+from ..utils_geo import GridSpec, bbox_from_geojson, mask_from_geojson, polygon_aoi_from_geojson
 from ..utils_time import time_id_from_iso, timestamps_for_range, trusted_utc_now
 from .io import minify_json_for_web, write_bin_f32, write_bin_u8, write_json
 
@@ -593,9 +593,18 @@ def run_daily(
     step_hours = max(int(step_hours), 6)
     run_id = "main"
     W, H = [int(x) for x in grid_wh.lower().split("x")]
+    aoi_geom = polygon_aoi_from_geojson(aoi_geojson)
     bbox = bbox_from_geojson(aoi_geojson)
     grid = GridSpec(lon_min=bbox[0], lat_min=bbox[1], lon_max=bbox[2], lat_max=bbox[3], width=W, height=H)
+    if not (grid.lon_max > grid.lon_min and grid.lat_max > grid.lat_min):
+        raise RuntimeError(f"AOI/grid extent collapsed: bbox={bbox!r}")
     mask = mask_from_geojson(aoi_geojson, grid)
+    mask_count = int(mask.sum())
+    if mask_count <= 0:
+        raise RuntimeError(
+            f"AOI mask is empty on the configured grid {W}x{H}. "
+            f"bbox={bbox!r}. Check AOI polygon extent and CRS."
+        )
     ts_list = timestamps_for_range(anchor_date=date, past_days=past_days, future_days=future_days, step_hours=step_hours)
     time_ids = [time_id_from_iso(iso) for iso in ts_list]
     id_by_iso = {iso: tid for iso, tid in zip(ts_list, time_ids)}
@@ -626,6 +635,12 @@ def run_daily(
         "bbox": list(bbox),
         "step_hours": step_hours,
         "grid": {"width": W, "height": H, "lon_min": grid.lon_min, "lon_max": grid.lon_max, "lat_min": grid.lat_min, "lat_max": grid.lat_max},
+        "aoi_summary": {
+            "geometry_type": aoi_geom.geom_type,
+            "bounds": [float(x) for x in aoi_geom.bounds],
+            "area_deg2": float(aoi_geom.area),
+            "mask_cells": mask_count,
+        },
         "runtime_flags": flags.__dict__,
     }
     write_json(run_root / "meta.json", run_meta)
