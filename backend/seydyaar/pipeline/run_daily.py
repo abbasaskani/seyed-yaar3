@@ -287,30 +287,50 @@ def _resize_nearest(a: np.ndarray, target_h: int, target_w: int) -> np.ndarray:
     return a[np.ix_(yi, xi)].astype(np.float32, copy=False)
 
 
-def _interp1d_nan(values: np.ndarray, new_len: int) -> np.ndarray:
-    vals = np.asarray(values, dtype=np.float32)
-    n = vals.shape[0]
-    if n == new_len:
-        return vals.astype(np.float32, copy=False)
-    xp = np.arange(n, dtype=np.float32)
-    xnew = np.linspace(0.0, float(n - 1), int(new_len), dtype=np.float32)
-    valid = np.isfinite(vals)
-    if not np.any(valid):
-        return np.full((new_len,), np.nan, dtype=np.float32)
-    if int(valid.sum()) == 1:
-        out = np.full((new_len,), float(vals[valid][0]), dtype=np.float32)
-        return out
-    return np.interp(xnew, xp[valid], vals[valid]).astype(np.float32)
-
-
 def _resize_bilinear_nan(a: np.ndarray, target_h: int, target_w: int) -> np.ndarray:
+    """Local NaN-aware bilinear resize.
+
+    The previous separable 1D interpolation filled whole rows/columns when only a single
+    finite sample existed there, which can drag one bad/coastal pixel across large parts of
+    the target raster. Here we bilinearly interpolate values and validity weights separately,
+    then divide, so influence stays spatially local.
+    """
     src = np.asarray(a, dtype=np.float32)
     src_h, src_w = src.shape
     if src_h == target_h and src_w == target_w:
         return src.astype(np.float32, copy=False)
-    tmp = np.vstack([_interp1d_nan(src[r, :], target_w) for r in range(src_h)]).astype(np.float32)
-    out = np.vstack([_interp1d_nan(tmp[:, c], target_h) for c in range(target_w)]).T.astype(np.float32)
-    return out
+    if src_h <= 0 or src_w <= 0:
+        return np.full((target_h, target_w), np.nan, dtype=np.float32)
+
+    valid = np.isfinite(src)
+    if not np.any(valid):
+        return np.full((target_h, target_w), np.nan, dtype=np.float32)
+
+    vals = np.where(valid, src, 0.0).astype(np.float32)
+    wts = valid.astype(np.float32)
+
+    ys = np.linspace(0.0, float(src_h - 1), int(target_h), dtype=np.float32)
+    xs = np.linspace(0.0, float(src_w - 1), int(target_w), dtype=np.float32)
+    y0 = np.floor(ys).astype(np.int64)
+    x0 = np.floor(xs).astype(np.int64)
+    y1 = np.clip(y0 + 1, 0, src_h - 1)
+    x1 = np.clip(x0 + 1, 0, src_w - 1)
+    wy = (ys - y0.astype(np.float32))[:, None]
+    wx = (xs - x0.astype(np.float32))[None, :]
+
+    def _bilinear(img: np.ndarray) -> np.ndarray:
+        i00 = img[y0[:, None], x0[None, :]]
+        i01 = img[y0[:, None], x1[None, :]]
+        i10 = img[y1[:, None], x0[None, :]]
+        i11 = img[y1[:, None], x1[None, :]]
+        top = i00 * (1.0 - wx) + i01 * wx
+        bot = i10 * (1.0 - wx) + i11 * wx
+        return (top * (1.0 - wy) + bot * wy).astype(np.float32)
+
+    num = _bilinear(vals)
+    den = _bilinear(wts)
+    out = np.divide(num, den, out=np.full((target_h, target_w), np.nan, dtype=np.float32), where=den > 1e-6)
+    return out.astype(np.float32)
 
 
 def _postprocess_resampled(key: str, src: np.ndarray, arr: np.ndarray, target_h: int, target_w: int) -> np.ndarray:
@@ -320,13 +340,11 @@ def _postprocess_resampled(key: str, src: np.ndarray, arr: np.ndarray, target_h:
     # Coarse daily/BGC fields need extra smoothing after interpolation, otherwise their native
     # row/column quantization becomes very visible on fine AOIs.
     if key in {"chl", "o2", "mld", "npp"}:
-        rad = max(1, min(4, int(round(up / 2.0))))
+        rad = max(1, min(5, int(round(up / 1.8))))
         out = nan_gaussian_like(out, radius=rad, passes=2)
-        out = destripe_axis_banding(out, strength=0.28, smooth_radius=max(6, min(target_h, target_w) // 18))
     elif key in {"ssh", "sss", "currents_u", "currents_v", "currents_speed"}:
-        rad = max(1, min(3, int(round(up / 3.0))))
-        out = nan_gaussian_like(out, radius=rad, passes=1)
-        out = destripe_axis_banding(out, strength=0.18, smooth_radius=max(6, min(target_h, target_w) // 18))
+        rad = max(1, min(4, int(round(up / 2.4))))
+        out = nan_gaussian_like(out, radius=rad, passes=2)
     else:
         if up > 1.5:
             out = nan_gaussian_like(out, radius=1, passes=1)
@@ -810,7 +828,7 @@ def run_daily(
         provider_status: List[Dict[str, Any]] = []
         front_base_q: Deque[np.ndarray] = deque(maxlen=max(front7_steps, front3_steps, 1))
 
-        QUALITY_FIX_VERSION = "2026-04-01-output-quality-v3"
+        QUALITY_FIX_VERSION = "2026-04-01-output-quality-v4-local-nan-resize"
 
         for ts_iso in ts_list:
             tid = id_by_iso[ts_iso]
