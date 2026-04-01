@@ -49,7 +49,7 @@ from ..models.ocean_features import (
 )
 from ..models.ops import ops_feasibility
 from ..models.scoring import HabitatInputs, habitat_scoring
-from ..utils_geo import GridSpec, bbox_from_geojson, mask_from_geojson, polygon_aoi_from_geojson
+from ..utils_geo import GridSpec, bbox_from_geojson, mask_from_geojson
 from ..utils_time import time_id_from_iso, timestamps_for_range, trusted_utc_now
 from .io import minify_json_for_web, write_bin_f32, write_bin_u8, write_json
 
@@ -267,13 +267,42 @@ def _read_nc_vars(path: Path, variables: Sequence[str]) -> Dict[str, np.ndarray]
     return out
 
 
-def _resize_nearest(a: np.ndarray, target_h: int, target_w: int) -> np.ndarray:
+def _resize_bilinear_nan(a: np.ndarray, target_h: int, target_w: int) -> np.ndarray:
     src_h, src_w = a.shape
+    arr = np.asarray(a, dtype=np.float32)
     if src_h == target_h and src_w == target_w:
-        return a.astype(np.float32, copy=False)
-    yi = np.rint(np.linspace(0, src_h - 1, target_h)).astype(np.int64)
-    xi = np.rint(np.linspace(0, src_w - 1, target_w)).astype(np.int64)
-    return a[np.ix_(yi, xi)].astype(np.float32, copy=False)
+        return arr.astype(np.float32, copy=False)
+
+    y = np.linspace(0.0, src_h - 1, target_h, dtype=np.float32)
+    x = np.linspace(0.0, src_w - 1, target_w, dtype=np.float32)
+    y0 = np.floor(y).astype(np.int64)
+    x0 = np.floor(x).astype(np.int64)
+    y1 = np.clip(y0 + 1, 0, src_h - 1)
+    x1 = np.clip(x0 + 1, 0, src_w - 1)
+    wy = (y - y0).astype(np.float32)
+    wx = (x - x0).astype(np.float32)
+
+    out = np.empty((target_h, target_w), dtype=np.float32)
+    for i in range(target_h):
+        top0 = arr[y0[i], x0]
+        top1 = arr[y0[i], x1]
+        bot0 = arr[y1[i], x0]
+        bot1 = arr[y1[i], x1]
+
+        w00 = (1.0 - wy[i]) * (1.0 - wx)
+        w01 = (1.0 - wy[i]) * wx
+        w10 = wy[i] * (1.0 - wx)
+        w11 = wy[i] * wx
+
+        vals = np.stack([top0, top1, bot0, bot1], axis=0)
+        ws = np.stack([w00, w01, w10, w11], axis=0).astype(np.float32)
+        valid = np.isfinite(vals)
+        num = np.sum(np.where(valid, vals * ws, 0.0), axis=0)
+        den = np.sum(np.where(valid, ws, 0.0), axis=0)
+        row = num / np.maximum(den, 1e-9)
+        row[den <= 1e-9] = np.nan
+        out[i] = row.astype(np.float32)
+    return out
 
 
 def _load_local_era5_wind(grid: GridSpec, ts_iso: str, template: str, variables: Sequence[str]) -> Optional[Dict[str, np.ndarray]]:
@@ -284,8 +313,8 @@ def _load_local_era5_wind(grid: GridSpec, ts_iso: str, template: str, variables:
     try:
         names = list(variables)[:2] if len(list(variables)) >= 2 else ["u10", "v10"]
         vv = _read_nc_vars(path, names)
-        u = _resize_nearest(vv[names[0]], grid.height, grid.width)
-        v = _resize_nearest(vv[names[1]], grid.height, grid.width)
+        u = _resize_bilinear_nan(vv[names[0]], grid.height, grid.width)
+        v = _resize_bilinear_nan(vv[names[1]], grid.height, grid.width)
         return {
             "wind_u10_m_s": u.astype(np.float32),
             "wind_v10_m_s": v.astype(np.float32),
@@ -436,7 +465,7 @@ def _try_copernicus_layers(
         raise RuntimeError(f"{key}: subset failed for {t0.isoformat()} (tried dataset-cadence offsets). Last error: {last_err}")
 
     def _to_grid(a: np.ndarray) -> np.ndarray:
-        return _resize_nearest(a, grid.height, grid.width)
+        return _resize_bilinear_nan(a, grid.height, grid.width)
 
     out: Dict[str, np.ndarray] = {}
     try:
@@ -593,18 +622,9 @@ def run_daily(
     step_hours = max(int(step_hours), 6)
     run_id = "main"
     W, H = [int(x) for x in grid_wh.lower().split("x")]
-    aoi_geom = polygon_aoi_from_geojson(aoi_geojson)
     bbox = bbox_from_geojson(aoi_geojson)
     grid = GridSpec(lon_min=bbox[0], lat_min=bbox[1], lon_max=bbox[2], lat_max=bbox[3], width=W, height=H)
-    if not (grid.lon_max > grid.lon_min and grid.lat_max > grid.lat_min):
-        raise RuntimeError(f"AOI/grid extent collapsed: bbox={bbox!r}")
     mask = mask_from_geojson(aoi_geojson, grid)
-    mask_count = int(mask.sum())
-    if mask_count <= 0:
-        raise RuntimeError(
-            f"AOI mask is empty on the configured grid {W}x{H}. "
-            f"bbox={bbox!r}. Check AOI polygon extent and CRS."
-        )
     ts_list = timestamps_for_range(anchor_date=date, past_days=past_days, future_days=future_days, step_hours=step_hours)
     time_ids = [time_id_from_iso(iso) for iso in ts_list]
     id_by_iso = {iso: tid for iso, tid in zip(ts_list, time_ids)}
@@ -635,12 +655,6 @@ def run_daily(
         "bbox": list(bbox),
         "step_hours": step_hours,
         "grid": {"width": W, "height": H, "lon_min": grid.lon_min, "lon_max": grid.lon_max, "lat_min": grid.lat_min, "lat_max": grid.lat_max},
-        "aoi_summary": {
-            "geometry_type": aoi_geom.geom_type,
-            "bounds": [float(x) for x in aoi_geom.bounds],
-            "area_deg2": float(aoi_geom.area),
-            "mask_cells": mask_count,
-        },
         "runtime_flags": flags.__dict__,
     }
     write_json(run_root / "meta.json", run_meta)
@@ -709,7 +723,7 @@ def run_daily(
                     "pcatch_frontplus": f"variants/{variant}/species/{sp}/times/{{time}}/pcatch_frontplus_f32.bin",
                     "pcatch_ensemble": f"variants/{variant}/species/{sp}/times/{{time}}/pcatch_ensemble_f32.bin",
                     "phab_scoring": f"variants/{variant}/species/{sp}/times/{{time}}/phab_f32.bin",
-                    "phab_frontplus": f"variants/{variant}/species/{sp}/times/{{time}}/phab_f32.bin",
+                    "phab_frontplus": f"variants/{variant}/species/{sp}/times/{{time}}/phab_frontplus_f32.bin",
                     "pops": f"variants/{variant}/species/{sp}/times/{{time}}/pops_f32.bin",
                     "agree": f"variants/{variant}/species/{sp}/times/{{time}}/agree_f32.bin",
                     "spread": f"variants/{variant}/species/{sp}/times/{{time}}/spread_f32.bin",
@@ -813,8 +827,9 @@ def run_daily(
             phab, _ = habitat_scoring(inputs, priors=priors, weights=weights)
             pops = ops_feasibility(cur, waves, ops_priors, gear_depth_m=10.0, wind_speed_m_s=ws)
             pcatch = np.clip(phab * pops, 0.0, 1.0).astype(np.float32)
-            front_mult = np.clip(0.92 + 0.22 * front_fused, 0.90, 1.14).astype(np.float32)
+            front_mult = np.clip(0.96 + 0.10 * front_fused, 0.95, 1.08).astype(np.float32)
             frontplus = np.clip(pcatch * front_mult, 0.0, 1.0).astype(np.float32)
+            phab_frontplus = np.clip(phab * front_mult, 0.0, 1.0).astype(np.float32)
             ens = np.nanmean(np.stack([pcatch, frontplus], axis=0), axis=0).astype(np.float32)
             agree, spread = ensemble_stats([pcatch, frontplus])
 
@@ -823,6 +838,7 @@ def run_daily(
             write_bin_f32(tdir / "pcatch_frontplus_f32.bin", frontplus)
             write_bin_f32(tdir / "pcatch_ensemble_f32.bin", ens)
             write_bin_f32(tdir / "phab_f32.bin", phab)
+            write_bin_f32(tdir / "phab_frontplus_f32.bin", phab_frontplus)
             write_bin_f32(tdir / "pops_f32.bin", pops)
             write_bin_f32(tdir / "agree_f32.bin", agree)
             write_bin_f32(tdir / "spread_f32.bin", spread)
