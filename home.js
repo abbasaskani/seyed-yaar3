@@ -1,25 +1,22 @@
 let deferredPrompt = null;
-
 const $ = (id) => document.getElementById(id);
 const safeText = (id, txt) => { const el = $(id); if (el) el.textContent = txt; };
-
 const strings = {
   en: {
-    h1: "Habitat × Operations → Catch Probability 🐟🌊",
-    p1: "Two scientific maps—Habitat Suitability (Phabitat) and Operational Feasibility (Pops)—combine into a single catchability score: Pcatch = Phabitat × Pops. Includes uncertainty (ensemble agreement/spread), explainable top‑10 hotspots, and offline install.",
+    h1: "Habitat × Ops → Catch Probability",
+    p1: "Scientific habitat/ops preview with explainable top hotspots.",
     launch: "Launch App",
     install: "Install PWA",
     prevTitle: "Latest preview"
   },
   fa: {
-    h1: "زیستگاه × عملیات → احتمال صید 🐟🌊",
-    p1: "دو نقشه علمی—مناسبت زیستگاه (Phabitat) و امکان‌پذیری عملیاتی (Pops)—در هم ضرب می‌شوند: Pcatch = Phabitat × Pops. همراه با عدم‌قطعیت (agreement/spread)، Top‑10 توضیح‌پذیر و نصب آفلاین.",
+    h1: "زیستگاه × عملیات → احتمال صید",
+    p1: "پیش‌نمایش علمی زیستگاه/عملیات با نقاط برتر توضیح‌پذیر.",
     launch: "ورود به اپ",
     install: "نصب اپ",
     prevTitle: "آخرین پیش‌نمایش"
   }
 };
-
 let lang = localStorage.getItem("lang") || "en";
 function applyLang(){
   const t = strings[lang];
@@ -30,53 +27,48 @@ function applyLang(){
   safeText("prevTitle", t.prevTitle);
   document.body.dir = (lang === "fa") ? "rtl" : "ltr";
 }
-
-document.getElementById("langToggle").addEventListener("click", ()=>{
+$("langToggle")?.addEventListener("click", ()=>{
   lang = (lang === "en") ? "fa" : "en";
   localStorage.setItem("lang", lang);
   applyLang();
 });
-
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
-  const btn = document.getElementById("installBtn");
-  btn.disabled = false;
+  const btn = $("installBtn");
+  if(btn) btn.disabled = false;
 });
-
-document.getElementById("installBtn").addEventListener("click", async ()=>{
+$("installBtn")?.addEventListener("click", async ()=>{
   if(!deferredPrompt) return;
   deferredPrompt.prompt();
   await deferredPrompt.userChoice;
   deferredPrompt = null;
-  document.getElementById("installBtn").disabled = true;
+  if($("installBtn")) $("installBtn").disabled = true;
 });
-
 async function loadMeta(){
   try{
-    // Prefer the stable endpoint if present
     let info = null;
     try{
-      const r0 = await fetch("./latest/meta.json", {cache:"no-store"});
+      const r0 = await fetch("./docs/latest/meta.json", {cache:"no-store"});
       if(r0.ok) info = await r0.json();
-    }catch(_){ /* ignore */ }
-
+    }catch(_){ }
     if(!info){
       const r = await fetch("./docs/latest/meta_index.json", {cache:"no-store"});
       const idx = await r.json();
       const latest = idx.latest_run_id;
       const run = idx.runs.find(x=>x.run_id===latest);
-      info = { generated_at_utc: run?.generated_at_utc || run?.created_utc || idx.generated_at_utc };
+      info = {
+        generated_at_utc: run?.generated_at_utc || run?.created_utc || idx.generated_at_utc,
+        latest_available_time_id: run?.latest_available_time_id || idx.latest_available_time_id || null,
+      };
     }
-
     const gen = info?.generated_at_utc ? new Date(info.generated_at_utc).toISOString().slice(0,16).replace("T"," ")+" UTC" : "—";
     const lastTid = info?.latest_available_time_id;
     const lastStr = lastTid ? ` • latest data: ${lastTid}` : "";
-    document.getElementById("prevMeta").textContent = gen + lastStr;
+    safeText("prevMeta", gen + lastStr);
   }catch(e){
-    document.getElementById("prevMeta").textContent = "—";
+    safeText("prevMeta", "—");
   }
 }
-
 applyLang();
 loadMeta();
