@@ -1,4 +1,4 @@
-name: Run daily + publish latest (canonical root, fingerprint-aware)
+name: Run daily + publish docs/latest only (canonical docs path)
 
 on:
   workflow_dispatch:
@@ -32,8 +32,8 @@ jobs:
       COPERNICUS_MARINE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
       SEYDYAAR_STRICT_COPERNICUS: '1'
       SEYDYAAR_TMPDIR: 'backend/.seydyaar_tmp'
-      SEYDYAAR_LOG_DIR: '.seydyaar_artifacts/logs'
-      SEYDYAAR_VERIFY_DIR: '.seydyaar_artifacts/verify'
+      SEYDYAAR_LOG_DIR: 'docs/latest/logs'
+      SEYDYAAR_VERIFY_DIR: 'docs/latest/verify'
       SEYDYAAR_PAST_DAYS: '1'
       SEYDYAAR_FUTURE_DAYS: '5'
       SEYDYAAR_STEP_HOURS: '12'
@@ -68,8 +68,11 @@ jobs:
 
       - name: Prepare output dirs
         run: |
-          rm -rf .seydyaar_artifacts || true
-          mkdir -p latest .seydyaar_artifacts/logs .seydyaar_artifacts/verify
+          rm -rf docs/latest/runs/main || true
+          rm -rf docs/latest/logs || true
+          rm -rf docs/latest/verify || true
+          rm -rf latest || true
+          mkdir -p docs/latest/logs docs/latest/verify
 
       - name: Run pipeline
         shell: bash
@@ -80,15 +83,7 @@ jobs:
           if [ "${{ github.event.inputs.force_regen || 'false' }}" = "true" ]; then
             EXTRA+=(--force)
           fi
-          python -m seydyaar run-daily \
-            --out latest \
-            --aoi-file "${{ github.event.inputs.aoi_file || 'backend/config/aoi.geojson' }}" \
-            --past-days "$SEYDYAAR_PAST_DAYS" \
-            --future-days "$SEYDYAAR_FUTURE_DAYS" \
-            --step-hours "$SEYDYAAR_STEP_HOURS" \
-            --grid "$SEYDYAAR_GRID" \
-            --species "$SEYDYAAR_SPECIES" \
-            "${EXTRA[@]}"
+          python -m seydyaar run-daily             --out docs/latest             --aoi-file "${{ github.event.inputs.aoi_file || 'backend/config/aoi.geojson' }}"             --past-days "$SEYDYAAR_PAST_DAYS"             --future-days "$SEYDYAAR_FUTURE_DAYS"             --step-hours "$SEYDYAAR_STEP_HOURS"             --grid "$SEYDYAAR_GRID"             --species "$SEYDYAAR_SPECIES"             "${EXTRA[@]}"
 
       - name: Upload logs + verify
         if: always()
@@ -96,21 +91,22 @@ jobs:
         with:
           name: seydyaar_verify_and_logs
           path: |
-            .seydyaar_artifacts/logs/**
-            .seydyaar_artifacts/verify/**
+            docs/latest/logs/**
+            docs/latest/verify/**
           if-no-files-found: warn
           include-hidden-files: true
           retention-days: 7
 
-      - name: Commit canonical latest only
+      - name: Commit canonical docs/latest only
         if: success()
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git add latest
+          git rm -r --ignore-unmatch latest || true
+          git add docs/latest .github/workflows/run_daily.yml
           git diff --cached --quiet && { echo 'No changes to commit'; exit 0; }
-          git commit -m 'Update canonical latest output + fingerprint-aware pipeline (auto)'
+          git commit -m 'Update canonical docs/latest output only (auto)'
           for i in 1 2 3; do
             git fetch origin main
             git rebase origin/main && break
