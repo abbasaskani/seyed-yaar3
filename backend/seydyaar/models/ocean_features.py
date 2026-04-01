@@ -96,32 +96,62 @@ def nan_gaussian_like(arr: np.ndarray, radius: int = 1, passes: int = 2) -> np.n
     return out.astype(np.float32)
 
 
-def destripe_axis_banding(arr: np.ndarray, strength: float = 0.35, smooth_radius: int = 8) -> np.ndarray:
+def destripe_axis_banding(
+    arr: np.ndarray,
+    strength: float = 0.20,
+    smooth_radius: int = 8,
+    support_frac: float = 0.80,
+) -> np.ndarray:
+    """Conservative axis-banding suppression.
+
+    Only remove row/column offsets when they are broad and nearly uniform across most of the
+    row/column. This avoids the earlier failure mode where one local anomaly changed the whole
+    row median/column median and then got painted across the raster.
+    """
     a = np.asarray(arr, dtype=np.float32)
     valid = np.isfinite(a)
-    if not np.any(valid) or min(a.shape) < 4 or float(strength) <= 0.0:
+    if not np.any(valid) or min(a.shape) < 8 or float(strength) <= 0.0:
         return a.astype(np.float32, copy=True)
+
+    sr = max(int(smooth_radius), 2)
+    base = nan_gaussian_like(a, radius=max(1, sr // 3), passes=2)
+    resid = a - base
+    resid[~valid] = np.nan
+    finite = resid[np.isfinite(resid)]
+    if finite.size < 16:
+        return a.astype(np.float32, copy=True)
+    global_mad = float(np.nanmedian(np.abs(finite - np.nanmedian(finite))))
+    if not np.isfinite(global_mad) or global_mad <= 1e-6:
+        return a.astype(np.float32, copy=True)
+
     h, w = a.shape
-    row_med = np.full((h,), np.nan, dtype=np.float32)
+    row_shift = np.zeros((h,), dtype=np.float32)
     for y in range(h):
-        vv = a[y, :]
+        vv = resid[y, :]
         ok = np.isfinite(vv)
-        if np.any(ok):
-            row_med[y] = np.float32(np.nanmedian(vv[ok]))
-    col_med = np.full((w,), np.nan, dtype=np.float32)
+        if ok.mean() < support_frac:
+            continue
+        med = float(np.nanmedian(vv[ok]))
+        mad = float(np.nanmedian(np.abs(vv[ok] - med)))
+        if abs(med) > 2.5 * global_mad and mad < 0.65 * global_mad:
+            row_shift[y] = np.float32(med)
+    col_shift = np.zeros((w,), dtype=np.float32)
     for x in range(w):
-        vv = a[:, x]
+        vv = resid[:, x]
         ok = np.isfinite(vv)
-        if np.any(ok):
-            col_med[x] = np.float32(np.nanmedian(vv[ok]))
-    sr = max(int(smooth_radius), 1)
-    row_hi = row_med - _smooth1d_nan(row_med, sr)
-    col_hi = col_med - _smooth1d_nan(col_med, sr)
-    band = np.zeros_like(a, dtype=np.float32)
-    if np.any(np.isfinite(row_hi)):
-        band += np.where(np.isfinite(row_hi), row_hi, 0.0)[:, None]
-    if np.any(np.isfinite(col_hi)):
-        band += np.where(np.isfinite(col_hi), col_hi, 0.0)[None, :]
+        if ok.mean() < support_frac:
+            continue
+        med = float(np.nanmedian(vv[ok]))
+        mad = float(np.nanmedian(np.abs(vv[ok] - med)))
+        if abs(med) > 2.5 * global_mad and mad < 0.65 * global_mad:
+            col_shift[x] = np.float32(med)
+
+    if not np.any(row_shift) and not np.any(col_shift):
+        return a.astype(np.float32, copy=True)
+
+    row_shift = np.where(np.abs(row_shift) > 0.0, row_shift - _smooth1d_nan(row_shift, sr), 0.0).astype(np.float32)
+    col_shift = np.where(np.abs(col_shift) > 0.0, col_shift - _smooth1d_nan(col_shift, sr), 0.0).astype(np.float32)
+    band = row_shift[:, None] + col_shift[None, :]
     out = a - np.float32(strength) * band
     out[~valid] = np.nan
     return out.astype(np.float32)
@@ -137,7 +167,7 @@ def gradient_magnitude(arr: np.ndarray) -> np.ndarray:
     aa = nan_gaussian_like(aa, radius=1, passes=2)
     gy, gx = np.gradient(aa.astype(np.float32))
     out = np.sqrt(gx * gx + gy * gy).astype(np.float32)
-    out = destripe_axis_banding(out, strength=0.30, smooth_radius=max(6, min(a.shape) // 20))
+    out = destripe_axis_banding(out, strength=0.10, smooth_radius=max(8, min(a.shape) // 16))
     out[~valid] = np.nan
     return out
 
@@ -156,10 +186,10 @@ def boa_front(arr: np.ndarray, denoise_radius: int = 1, background_radius: int =
     sm = nan_gaussian_like(a, radius=max(denoise_radius, 1), passes=2)
     bg = nan_gaussian_like(sm, radius=max(background_radius, 2), passes=2)
     anom = sm - bg
-    anom = destripe_axis_banding(anom, strength=0.45, smooth_radius=max(6, 2 * background_radius + 2))
+    anom = destripe_axis_banding(anom, strength=0.10, smooth_radius=max(8, 2 * background_radius + 4))
     front = gradient_magnitude(anom)
     front = nan_gaussian_like(front, radius=1, passes=1)
-    front = destripe_axis_banding(front, strength=0.35, smooth_radius=max(6, 2 * background_radius + 2))
+    front = destripe_axis_banding(front, strength=0.08, smooth_radius=max(8, 2 * background_radius + 4))
     out = robust_normalize(front, lo_q=15.0, hi_q=92.0, min_span=5e-4)
     if out.shape[0] >= 3 and out.shape[1] >= 3:
         out[0, :] = out[1, :]
@@ -174,7 +204,7 @@ def front_persistence(front_stack: Sequence[np.ndarray]) -> np.ndarray:
         raise ValueError("front_stack must not be empty")
     stack = np.stack([np.asarray(x, dtype=np.float32) for x in front_stack], axis=0)
     out = np.nanmean(stack, axis=0).astype(np.float32)
-    return destripe_axis_banding(nan_gaussian_like(out, radius=1, passes=1), strength=0.20, smooth_radius=max(6, min(out.shape)//20))
+    return destripe_axis_banding(nan_gaussian_like(out, radius=1, passes=1), strength=0.06, smooth_radius=max(8, min(out.shape)//16))
 
 
 def fuse_fronts(
@@ -207,14 +237,14 @@ def fuse_fronts(
             continue
         clean = nan_gaussian_like(arr, radius=1, passes=1)
         if key in {"chl", "ssh", "persist_7d"}:
-            clean = destripe_axis_banding(clean, strength=0.25, smooth_radius=max(6, min(clean.shape)//20))
+            clean = destripe_axis_banding(clean, strength=0.06, smooth_radius=max(8, min(clean.shape)//16))
         out += weight * clean
         total += weight
     if total <= 0.0:
         return robust_normalize(front_boa_sst)
     out = out / total
     out = nan_gaussian_like(out, radius=1, passes=2)
-    out = destripe_axis_banding(out, strength=0.25, smooth_radius=max(6, min(out.shape)//18))
+    out = destripe_axis_banding(out, strength=0.05, smooth_radius=max(8, min(out.shape)//14))
     return robust_normalize(out, lo_q=15.0, hi_q=92.0, min_span=5e-4)
 
 
@@ -224,7 +254,7 @@ def compute_eke(u: np.ndarray, v: np.ndarray) -> np.ndarray:
     uu_a = uu - nan_gaussian_like(uu, radius=2, passes=2)
     vv_a = vv - nan_gaussian_like(vv, radius=2, passes=2)
     out = (0.5 * (uu_a * uu_a + vv_a * vv_a)).astype(np.float32)
-    return destripe_axis_banding(out, strength=0.25, smooth_radius=max(6, min(out.shape)//18))
+    return destripe_axis_banding(out, strength=0.05, smooth_radius=max(8, min(out.shape)//14))
 
 
 def compute_vorticity(u: np.ndarray, v: np.ndarray) -> np.ndarray:
@@ -233,7 +263,7 @@ def compute_vorticity(u: np.ndarray, v: np.ndarray) -> np.ndarray:
     du_dy, du_dx = np.gradient(uu)
     dv_dy, dv_dx = np.gradient(vv)
     out = (dv_dx - du_dy).astype(np.float32)
-    return destripe_axis_banding(out, strength=0.25, smooth_radius=max(6, min(out.shape)//18))
+    return destripe_axis_banding(out, strength=0.05, smooth_radius=max(8, min(out.shape)//14))
 
 
 def compute_strain(u: np.ndarray, v: np.ndarray) -> np.ndarray:
@@ -244,14 +274,14 @@ def compute_strain(u: np.ndarray, v: np.ndarray) -> np.ndarray:
     s1 = du_dx - dv_dy
     s2 = dv_dx + du_dy
     out = np.sqrt(s1 * s1 + s2 * s2).astype(np.float32)
-    return destripe_axis_banding(out, strength=0.25, smooth_radius=max(6, min(out.shape)//18))
+    return destripe_axis_banding(out, strength=0.05, smooth_radius=max(8, min(out.shape)//14))
 
 
 def compute_okubo_weiss(vorticity: np.ndarray, strain: np.ndarray) -> np.ndarray:
     vort = np.asarray(vorticity, np.float32)
     st = np.asarray(strain, np.float32)
     out = (st * st - vort * vort).astype(np.float32)
-    return destripe_axis_banding(out, strength=0.20, smooth_radius=max(6, min(out.shape)//18))
+    return destripe_axis_banding(out, strength=0.05, smooth_radius=max(8, min(out.shape)//14))
 
 
 def detect_eddy_mask(okubo_weiss: np.ndarray, ssh: np.ndarray | None = None) -> np.ndarray:
