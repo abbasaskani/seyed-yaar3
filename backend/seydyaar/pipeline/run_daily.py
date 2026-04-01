@@ -35,6 +35,8 @@ from ..models.ocean_features import (
     anomaly,
     boa_front,
     box_mean,
+    destripe_axis_banding,
+    nan_gaussian_like,
     compute_eddy_edge_distance,
     compute_eke,
     compute_okubo_weiss,
@@ -61,6 +63,14 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _stable_json_bytes(obj: Any) -> bytes:
+    return json.dumps(obj, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+
+def _sha256_obj(obj: Any) -> str:
+    return hashlib.sha256(_stable_json_bytes(obj)).hexdigest()
 
 
 def _append_jsonl(path: Path, obj: Dict[str, Any]) -> None:
@@ -303,6 +313,26 @@ def _resize_bilinear_nan(a: np.ndarray, target_h: int, target_w: int) -> np.ndar
     return out
 
 
+def _postprocess_resampled(key: str, src: np.ndarray, arr: np.ndarray, target_h: int, target_w: int) -> np.ndarray:
+    out = np.asarray(arr, dtype=np.float32)
+    src_h, src_w = src.shape
+    up = max(float(target_h) / max(src_h, 1), float(target_w) / max(src_w, 1))
+    # Coarse daily/BGC fields need extra smoothing after interpolation, otherwise their native
+    # row/column quantization becomes very visible on fine AOIs.
+    if key in {"chl", "o2", "mld", "npp"}:
+        rad = max(1, min(4, int(round(up / 2.0))))
+        out = nan_gaussian_like(out, radius=rad, passes=2)
+        out = destripe_axis_banding(out, strength=0.28, smooth_radius=max(6, min(target_h, target_w) // 18))
+    elif key in {"ssh", "sss", "currents_u", "currents_v", "currents_speed"}:
+        rad = max(1, min(3, int(round(up / 3.0))))
+        out = nan_gaussian_like(out, radius=rad, passes=1)
+        out = destripe_axis_banding(out, strength=0.18, smooth_radius=max(6, min(target_h, target_w) // 18))
+    else:
+        if up > 1.5:
+            out = nan_gaussian_like(out, radius=1, passes=1)
+    return out.astype(np.float32)
+
+
 def _load_local_era5_wind(grid: GridSpec, ts_iso: str, template: str, variables: Sequence[str]) -> Optional[Dict[str, np.ndarray]]:
     date_key = dtparser.isoparse(ts_iso).astimezone(tz.UTC).strftime("%Y%m%d")
     path = Path(template.format(date=date_key))
@@ -311,8 +341,8 @@ def _load_local_era5_wind(grid: GridSpec, ts_iso: str, template: str, variables:
     try:
         names = list(variables)[:2] if len(list(variables)) >= 2 else ["u10", "v10"]
         vv = _read_nc_vars(path, names)
-        u = _resize_bilinear_nan(vv[names[0]], grid.height, grid.width)
-        v = _resize_bilinear_nan(vv[names[1]], grid.height, grid.width)
+        u = _postprocess_resampled("wind_u", vv[names[0]], _resize_bilinear_nan(vv[names[0]], grid.height, grid.width), grid.height, grid.width)
+        v = _postprocess_resampled("wind_v", vv[names[1]], _resize_bilinear_nan(vv[names[1]], grid.height, grid.width), grid.height, grid.width)
         return {
             "wind_u10_m_s": u.astype(np.float32),
             "wind_v10_m_s": v.astype(np.float32),
@@ -366,7 +396,7 @@ def _try_copernicus_layers(
 
     tmpdir = Path(os.getenv("SEYDYAAR_TMPDIR", ".seydyaar_tmp"))
     tmpdir.mkdir(parents=True, exist_ok=True)
-    log_dir = Path(os.getenv("SEYDYAAR_LOG_DIR", "docs/latest/logs"))
+    log_dir = Path(os.getenv("SEYDYAAR_LOG_DIR", ".seydyaar_artifacts/logs"))
     log_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = log_dir / "download_manifest.jsonl"
 
@@ -381,6 +411,8 @@ def _try_copernicus_layers(
         v = cfg.get("variable")
         return [v] if v else []
 
+    subset_context = {"bbox": [float(lon_min), float(lat_min), float(lon_max), float(lat_max)], "grid": {"width": int(grid.width), "height": int(grid.height)}}
+
     def _subset_one(key: str) -> Path:
         cfg = datasets_cfg[key]
         dsid = cfg["dataset_id"]
@@ -391,7 +423,6 @@ def _try_copernicus_layers(
         for off in _dataset_offsets_hours(key):
             tt0 = t0 + timedelta(hours=off)
             tt1 = tt0
-            p = tmpdir / f"{key}_{tt0.strftime('%Y%m%dT%H%M%S')}.nc"
             rec: Dict[str, Any] = {
                 "layer": key,
                 "dataset_id": dsid,
@@ -402,7 +433,7 @@ def _try_copernicus_layers(
                 "coordinates_selection_method": "nearest",
                 "depth_target_m": cfg.get("depth_target_m", cfg.get("depth_m", None)),
                 "depth_selected_m": None,
-                "output_nc": str(p),
+                "output_nc": None,
                 "ok": False,
                 "bytes": 0,
                 "sha256": None,
@@ -420,6 +451,9 @@ def _try_copernicus_layers(
                             min_depth = max_depth = float(best)
                     except Exception:
                         pass
+                subset_sig = _sha256_obj({"layer": key, "dataset_id": dsid, "variables": vars_, "resolved_time_utc": tt0.isoformat(), **subset_context, "depth_selected_m": rec["depth_selected_m"]})[:12]
+                p = tmpdir / f"{key}_{tt0.strftime('%Y%m%dT%H%M%S')}_{subset_sig}.nc"
+                rec["output_nc"] = str(p)
                 if p.exists() and p.stat().st_size > 0:
                     rec["ok"] = True
                     rec["reused"] = True
@@ -462,31 +496,36 @@ def _try_copernicus_layers(
                 continue
         raise RuntimeError(f"{key}: subset failed for {t0.isoformat()} (tried dataset-cadence offsets). Last error: {last_err}")
 
-    def _to_grid(a: np.ndarray) -> np.ndarray:
-        return _resize_bilinear_nan(a, grid.height, grid.width)
+    def _to_grid(key: str, a: np.ndarray) -> np.ndarray:
+        resized = _resize_bilinear_nan(a, grid.height, grid.width)
+        return _postprocess_resampled(key, a, resized, grid.height, grid.width)
 
     out: Dict[str, np.ndarray] = {}
     try:
         p_sst = _subset_one("sst")
-        out["sst_c"] = _to_grid(_read_nc_vars(p_sst, _vnames("sst"))[_vnames("sst")[0]])
+        src_sst = _read_nc_vars(p_sst, _vnames("sst"))[_vnames("sst")[0]]
+        out["sst_c"] = _to_grid("sst", src_sst)
 
         p_chl = _subset_one("chl")
-        out["chl_mg_m3"] = _to_grid(_read_nc_vars(p_chl, _vnames("chl"))[_vnames("chl")[0]])
+        src_chl = _read_nc_vars(p_chl, _vnames("chl"))[_vnames("chl")[0]]
+        out["chl_mg_m3"] = _to_grid("chl", src_chl)
 
         p_ssh = _subset_one("ssh")
-        out["ssh_m"] = _to_grid(_read_nc_vars(p_ssh, _vnames("ssh"))[_vnames("ssh")[0]])
+        src_ssh = _read_nc_vars(p_ssh, _vnames("ssh"))[_vnames("ssh")[0]]
+        out["ssh_m"] = _to_grid("ssh", src_ssh)
 
         p_cur = _subset_one("currents")
         cur_names = _vnames("currents")
         vv = _read_nc_vars(p_cur, cur_names[:2])
-        u = _to_grid(vv[cur_names[0]])
-        v = _to_grid(vv[cur_names[1]])
+        u = _to_grid("currents_u", vv[cur_names[0]])
+        v = _to_grid("currents_v", vv[cur_names[1]])
         out["u_current_m_s"] = u.astype(np.float32)
         out["v_current_m_s"] = v.astype(np.float32)
-        out["current_m_s"] = np.sqrt(u.astype(np.float64) ** 2 + v.astype(np.float64) ** 2).astype(np.float32)
+        out["current_m_s"] = _postprocess_resampled("currents_speed", u, np.sqrt(u.astype(np.float64) ** 2 + v.astype(np.float64) ** 2).astype(np.float32), grid.height, grid.width)
 
         p_waves = _subset_one("waves")
-        out["waves_hs_m"] = _to_grid(_read_nc_vars(p_waves, _vnames("waves"))[_vnames("waves")[0]])
+        src_waves = _read_nc_vars(p_waves, _vnames("waves"))[_vnames("waves")[0]]
+        out["waves_hs_m"] = _to_grid("waves", src_waves)
 
         if flags.enable_vertical:
             for key, out_key in (("sss", "sss_psu"), ("mld", "mld_m"), ("o2", "o2_mmol_m3")):
@@ -496,7 +535,8 @@ def _try_copernicus_layers(
                 try:
                     p_opt = _subset_one(key)
                     var_name = _vnames(key)[0]
-                    out[out_key] = _to_grid(_read_nc_vars(p_opt, [var_name])[var_name])
+                    src_opt = _read_nc_vars(p_opt, [var_name])[var_name]
+                    out[out_key] = _to_grid(key, src_opt)
                 except Exception as ee:
                     status["warnings"].append(f"{key} optional layer skipped: {ee}")
 
@@ -506,7 +546,8 @@ def _try_copernicus_layers(
                 try:
                     p_npp = _subset_one("npp")
                     var_name = _vnames("npp")[0]
-                    out["npp_mgC_m3_d"] = _to_grid(_read_nc_vars(p_npp, [var_name])[var_name])
+                    src_npp = _read_nc_vars(p_npp, [var_name])[var_name]
+                    out["npp_mgC_m3_d"] = _to_grid("npp", src_npp)
                 except Exception as ee:
                     status["warnings"].append(f"npp optional layer skipped: {ee}")
 
@@ -626,8 +667,29 @@ def run_daily(
     ts_list = timestamps_for_range(anchor_date=date, past_days=past_days, future_days=future_days, step_hours=step_hours)
     time_ids = [time_id_from_iso(iso) for iso in ts_list]
     id_by_iso = {iso: tid for iso, tid in zip(ts_list, time_ids)}
+    spatial_fp = {
+        "aoi": aoi_geojson,
+        "bbox": [float(x) for x in bbox],
+        "grid": {"width": int(W), "height": int(H), "lon_min": float(grid.lon_min), "lon_max": float(grid.lon_max), "lat_min": float(grid.lat_min), "lat_max": float(grid.lat_max)},
+        "variant": variant,
+        "species": sorted(list((species_filter or list(species_profiles.keys())))),
+        "step_hours": int(step_hours),
+        "past_days": int(past_days),
+        "future_days": int(future_days),
+        "date": str(date),
+    }
+    spatial_hash = _sha256_obj(spatial_fp)
     run_root = out_root / "runs" / run_id
     run_root.mkdir(parents=True, exist_ok=True)
+    fingerprint_path = run_root / "_run_fingerprint.json"
+    old_hash = None
+    if fingerprint_path.exists():
+        try:
+            old_hash = json.loads(fingerprint_path.read_text(encoding="utf-8")).get("spatial_hash")
+        except Exception:
+            old_hash = None
+    if old_hash and old_hash != spatial_hash:
+        shutil.rmtree(run_root / "variants", ignore_errors=True)
 
     datasets_cfg_path = Path("backend/config/datasets.json")
     datasets_cfg = json.loads(datasets_cfg_path.read_text(encoding="utf-8")) if datasets_cfg_path.exists() else {}
@@ -654,13 +716,15 @@ def run_daily(
         "step_hours": step_hours,
         "grid": {"width": W, "height": H, "lon_min": grid.lon_min, "lon_max": grid.lon_max, "lat_min": grid.lat_min, "lat_max": grid.lat_max},
         "runtime_flags": flags.__dict__,
+        "spatial_hash": spatial_hash,
+        "aoi_summary": {"feature_count": len(aoi_geojson.get("features", [])) if isinstance(aoi_geojson, dict) else None},
     }
     write_json(run_root / "meta.json", run_meta)
     minify_json_for_web(run_root / "meta.json")
 
     strict_cmems = os.getenv("SEYDYAAR_STRICT_COPERNICUS", "0") == "1"
     force = os.getenv("SEYDYAAR_FORCE_REGEN", "0") == "1"
-    verify_dir = Path(os.getenv("SEYDYAAR_VERIFY_DIR", out_root / "verify"))
+    verify_dir = Path(os.getenv("SEYDYAAR_VERIFY_DIR", ".seydyaar_artifacts/verify"))
     if flags.copy_verify_nc:
         verify_dir.mkdir(parents=True, exist_ok=True)
         verify_time_id = now_utc.replace(hour=0, minute=0, second=0, microsecond=0).strftime("%Y%m%d_0000Z")
@@ -751,7 +815,7 @@ def run_daily(
         for ts_iso in ts_list:
             tid = id_by_iso[ts_iso]
             tdir = times_root / tid
-            version_marker = tdir / "_quality_version.txt"
+            version_marker = tdir / "_quality_version.json"
             required_outputs = [
                 tdir / "phab_f32.bin",
                 tdir / "phab_frontplus_f32.bin",
@@ -762,7 +826,12 @@ def run_daily(
             skip_ok = False
             if not force and version_marker.exists():
                 try:
-                    skip_ok = version_marker.read_text(encoding="utf-8").strip() == QUALITY_FIX_VERSION and all(p.exists() for p in required_outputs)
+                    marker = json.loads(version_marker.read_text(encoding="utf-8"))
+                    skip_ok = (
+                        marker.get("quality_fix_version") == QUALITY_FIX_VERSION
+                        and marker.get("spatial_hash") == spatial_hash
+                        and all(p.exists() for p in required_outputs)
+                    )
                 except Exception:
                     skip_ok = False
             if skip_ok:
@@ -780,9 +849,12 @@ def run_daily(
             ucur = layers["u_current_m_s"]
             vcur = layers["v_current_m_s"]
 
-            front_sst = boa_front(sst, denoise_radius=1, background_radius=3)
-            front_logchl = boa_front(np.log10(np.clip(chl, 1e-6, None)), denoise_radius=1, background_radius=3)
-            front_ssh = boa_front(ssh, denoise_radius=1, background_radius=2)
+            sst_front_src = nan_gaussian_like(sst, radius=1, passes=1)
+            chl_front_src = nan_gaussian_like(np.log10(np.clip(chl, 1e-6, None)), radius=2, passes=2)
+            ssh_front_src = nan_gaussian_like(ssh, radius=1, passes=1)
+            front_sst = boa_front(sst_front_src, denoise_radius=1, background_radius=3)
+            front_logchl = boa_front(chl_front_src, denoise_radius=2, background_radius=5)
+            front_ssh = boa_front(ssh_front_src, denoise_radius=1, background_radius=3)
             base_front = fuse_fronts(front_sst, front_logchl, front_ssh, None, None, {
                 "sst": front_fusion_weights.get("sst", 0.34),
                 "chl": front_fusion_weights.get("chl", 0.28),
@@ -841,7 +913,7 @@ def run_daily(
             phab, _ = habitat_scoring(inputs, priors=priors, weights=weights)
             pops = ops_feasibility(cur, waves, ops_priors, gear_depth_m=10.0, wind_speed_m_s=ws)
             pcatch = np.clip(phab * pops, 0.0, 1.0).astype(np.float32)
-            front_mult = np.clip(0.96 + 0.10 * box_mean(front_fused, radius=1), 0.94, 1.08).astype(np.float32)
+            front_mult = np.clip(0.985 + 0.05 * nan_gaussian_like(front_fused, radius=1, passes=1), 0.97, 1.04).astype(np.float32)
             phab_frontplus = np.clip(phab * front_mult, 0.0, 1.0).astype(np.float32)
             frontplus = np.clip(phab_frontplus * pops, 0.0, 1.0).astype(np.float32)
             ens = np.nanmean(np.stack([pcatch, frontplus], axis=0), axis=0).astype(np.float32)
@@ -863,7 +935,7 @@ def run_daily(
             write_bin_f32(tdir / "waves_f32.bin", waves.astype(np.float32))
             write_bin_u8(tdir / "qc_chl_u8.bin", layers["qc_chl"])
             write_bin_f32(tdir / "conf_f32.bin", layers["conf"])
-            version_marker.write_text(QUALITY_FIX_VERSION, encoding="utf-8")
+            write_json(version_marker, {"quality_fix_version": QUALITY_FIX_VERSION, "spatial_hash": spatial_hash})
 
             if flags.write_extended_layers:
                 if eke is not None:
@@ -920,6 +992,7 @@ def run_daily(
     run_meta["latest_available_time_id"] = time_ids[-1] if time_ids else None
     write_json(run_root / "meta.json", run_meta)
     minify_json_for_web(run_root / "meta.json")
+    write_json(fingerprint_path, {"spatial_hash": spatial_hash, "spatial_fp": spatial_fp})
     _write_meta_index(out_root, run_entry)
     _write_latest_index_and_meta(out_root, run_entry, variant)
     return run_id
