@@ -1,0 +1,65 @@
+{
+  "spatial_hash": "3cc1e9f57027abc27be2cac2366669f9cfd1f7bbdcdf965710d5d487e5151621",
+  "spatial_fp": {
+    "aoi": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": {
+            "name": "bbox_61_65_17_22"
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  61.0,
+                  17.0
+                ],
+                [
+                  65.0,
+                  17.0
+                ],
+                [
+                  65.0,
+                  22.0
+                ],
+                [
+                  61.0,
+                  22.0
+                ],
+                [
+                  61.0,
+                  17.0
+                ]
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    "bbox": [
+      61.0,
+      17.0,
+      65.0,
+      22.0
+    ],
+    "grid": {
+      "width": 160,
+      "height": 160,
+      "lon_min": 61.0,
+      "lon_max": 65.0,
+      "lat_min": 17.0,
+      "lat_max": 22.0
+    },
+    "variant": "auto",
+    "species": [
+      "skipjack"
+    ],
+    "step_hours": 12,
+    "past_days": 1,
+    "future_days": 5,
+    "date": "today"
+  }
+}
