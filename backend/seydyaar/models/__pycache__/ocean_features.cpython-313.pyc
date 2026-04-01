@@ -1,0 +1,438 @@
+ó
+
+    0wÍi<?  ã                  ó¤  • S SK Jr  S SKJrJr  S SKrS SKrSSS jjrS S jr	   S!         S"S jjr
+S#S$S jjrS%S&S jjr   S'         S(S	 jjr
+S)S
+ jrS*S+S jjrS,S jr S-             S.S
+ jjrS/S jrS/S jrS/S jrS0S jrS-S1S jjrS2S jrS2S jrS3S jrS4S jrS5S jrS6S jrS7S jrS8S jrS9S jrS:S;S jjr S5S jr!g)<é    )Úannotations)ÚDictÚSequenceNc                óÄ   • [         R                  " U [         R                  S9R                  5       n[         R                  " U5      U[         R                  " U5      ) '   U$ )N©Údtype)ÚnpÚasarrayÚfloat32ÚcopyÚisfinite)ÚaÚfillÚouts      ÚL/mnt/data/deepfix_v2/changed_files/backend/seydyaar/models/ocean_features.pyÚ_nan_to_numr      sC   € Ü
+*Š*QœbŸj™jÑ
+)×
+.Ñ
+.Ó
+0€CÜŸZšZ¨Ó-€CŒŠSÓ	ÐÑØ€Jó    c                ó,  • [         R                  " U [         R                  S9n[        [	        U5      S5      nUS::  a  UR                  [         R                  SS9$ [         R                  " U5      n[         R                  " U5      (       d2  [         R                  " U[         R                  [         R                  S9$ [         R                  " XBS5      R                  [         R                  5      nUR                  [         R                  5      n[         R                  " XSU4SS9n[         R                  " XcU4SS9n[         R                  " USS	S9R                  S5      n[         R                  " USS	S9R                  S5      nS
+U-  S-   n	XyS  US U	*  -
+  n
+X‰S  US U	*  -
+  n[         R                  " U
+[         R                  " US5      [         R                  S9n[         R                  XËS:*  '   UR                  [         R                  5      $ )
+Nr   r   T©r   ç        Úedge©Úmode©é   r   Úconstanté   r   ç      ð?)r	   r
+   r   ÚmaxÚintÚastyper
+   ÚanyÚ	full_likeÚnanÚwhereÚpadÚcumsumÚdivideÚmaximum)
+ÚxÚradiusÚvalsÚrÚvalidÚvvÚwwÚsvÚswÚkÚsumsÚcntsr   s
+                r   Ú
+_smooth1d_nanr6      sŠ  € Ü
+:Š:aœrŸz™zÑ*€DÜŒC‹K˜Ó€AØˆAƒvØ{‰{œ2Ÿ:™:¨Dˆ{Ð1Ð1ÜKŠK˜Ó€EÜ
+6Š6%=‰=Ü|Š|˜D¤"§&¡&´·
+±
+Ñ;Ð;Ü	Š%˜sÓ	#×	*Ñ	*¬2¯:©:Ó	6€BØ	‰”b—j‘jÓ	!€BÜ	Š˜F Ñ	(€BÜ	Š˜F Ñ	(€BÜ	ŠF Ñ	,×	3Ñ	3°AÓ	6€BÜ	ŠF Ñ	,×	3Ñ	3°AÓ	6€BØ	ˆA‰‰	€AØ
+ˆbˆ6Bs˜˜GÑ€DØ
+ˆbˆ6Bs˜˜GÑ€DÜ
+)Š)Dœ"Ÿ*š* T¨3Ó/´r·z±zÑ
+B€CÜ—v‘v€C‰ÑØ:‰:”b—j‘jÓ!Ð!r   c                ó<  • [         R                  " U [         R                  S9n[         R                  " U5      n[         R                  " U5      (       d#  [         R
+                  " U[         R                  S9$ XE   n[         R                  " XaU/5      u  px[         R                  " U5      (       d  [        [         R                  " U5      5      n[         R                  " U5      (       d  [        [         R                  " U5      5      n[        X‡-
+  5      n	[        [         R                  " U5      5      n
+[        [        U5      SU
+-  5      n[         R                  " U	5      (       a  X›::  a8  [         R
+                  " U[         R                  S9n[         R                  XÅ) '   U$ U[         R                  " U5      -
+  [         R                  " U	5      -  n[         R                  XÅ) '   [         R                  " USS5      R                  [         R                  5      $ )Nr   ç{®Gáz´?r   r   )r	   r
+   r   r
+   r"   Ú
+zeros_likeÚ
+nanpercentileÚfloatÚnanminÚnanmaxÚnanstdr   r$   Úclipr!   )
+r   Úlo_qÚhi_qÚmin_spanÚarrr.   r,   ÚloÚhiÚspanÚsigmaÚfloorr   s
+                r   Úrobust_normalizerI   $   s\  € ô 
+*Š*QœbŸj™jÑ
+)€CÜKŠK˜Ó€EÜ
+6Š6%=‰=Ü}Š}˜S¬¯
+©
+Ñ3Ð3Ø‰:€DÜ
+×
+Ò
+˜d¨4 LÓ
+1F€BÜ
+;Š;r?‰?Ü
+”2—9’9˜T“?Ó
+#ˆÜ
+;Š;r?‰?Ü
+”2—9’9˜T“?Ó
+#ˆÜ‘‹>€DÜ”"—)’)˜D“/Ó"€EÜ”h“ ¨¡Ó.€EÜKŠK˜×Ñ $£-ÜmŠm˜C¤r§z¡zÑ2ˆÜ—f‘fˆˆF‰Øˆ
+Ø”—’˜B“Ñ¤2§:¢:¨dÓ#3Ñ
+3€CÜ—&‘&€CˆKÜ
+7Š73˜˜SÓ!×(Ñ(¬¯©Ó4Ð4r   c                óæ  • [         R                  " U [         R                  S9n[        [	        U5      S5      nUS:X  a  UR                  [         R                  SS9$ [         R                  " U5      n[         R                  " U5      (       d#  [         R                  " U[         R                  S9$ [         R                  " XBS5      R                  [         R                  5      nUR                  [         R                  5      nX34X344n[         R                  " XWSS9n[         R                  " XgSS9n[         R                  " USS	S9R                  S5      R                  S
+5      n[         R                  " USS	S9R                  S5      R                  S
+5      n	SU-  S
+-   n
+XŠS2U
+S24   USU
+* 2U
+S24   -
+  XŠS2SU
+* 24   -
+  USU
+* 2SU
+* 24   -   nXšS2U
+S24   U	SU
+* 2U
+S24   -
+  XšS2SU
+* 24   -
+  U	SU
+* 2SU
+* 24   -   n[         R                  " U[         R                  " US
+5      [         R                  S9n
+[         R                  XÜS:*  '   U
+R                  [         R                  5      $ )z,NaN-aware 2D box mean using integral images.r   r   Fr   r   r   r   )r   r   r   r   r   Nr   )r	   r
+   r   r   r    r!   r
+   r"   r9   r%   r&   r'   r(   r)   r$   )rC   r+   r   r-   r.   ÚvaluesÚweightsr&   r1   r2   r3   Úsum_winÚcnt_winr   s                 r   Úbox_meanrO   @   s  € ä
+
+Š
+3œbŸj™jÑ)€AÜŒC‹K˜Ó€AØˆAƒvØx‰xœŸ
+™
+¨ˆxÐ/Ð/ÜKŠK˜‹N€EÜ
+6Š6%=‰=Ü}Š}˜Q¤b§j¡jÑ1Ð1Ü
+XŠXe Ó
+$×
++Ñ
++¬B¯J©JÓ
+7€FØl‰lœ2Ÿ:™:Ó&€GØ
+ˆ6A6Ð
+€CÜ
+VŠVF fÑ
+-€FÜfŠfW¨Ñ/€GÜ	ŠÐ(¨zÑ	:×	AÑ	AÀ!Ó	D×	KÑ	KÈAÓ	N€BÜ	ŠÐ)°
+Ñ	;×	BÑ	BÀ1Ó	E×	LÑ	LÈQÓ	O€BØ	ˆA‰‰	€AØ‘Q‘R‰j˜2˜c ˜r˜c 1¡2˜g™;Ñ&¨©B°°!°°¨G©Ñ4°r¸#¸A¸2¸#¸sÀÀ¸s¸(±|ÑC€GØ‘Q‘R‰j˜2˜c ˜r˜c 1¡2˜g™;Ñ&¨©B°°!°°¨G©Ñ4°r¸#¸A¸2¸#¸sÀÀ¸s¸(±|ÑC€GÜ
+)Š)GœRŸZšZ¨°Ó5¼R¿Z¹ZÑ
+H€CÜŸ&™&€C3‰ÑØ:‰:”b—j‘jÓ!Ð!r   c                óX  • [         R                  " U [         R                  S9n[        [	        U5      S5      n[        [	        U5      S5      nUS::  a  UR                  [         R                  SS9$ [
+        U5       H  n[        X4S9nM     UR                  [         R                  5      $ )Nr   r   r   Tr   )r+   )r	   r
+   r   r   r    r!   ÚrangerO   )rC   r+   Úpassesr   r-   ÚpÚ_s          r   Únan_gaussian_likerU   X   s   € Ü
+*Š*S¤§
+¡
+Ñ
++€CÜŒC‹K˜Ó€AÜŒC‹K˜Ó€AØˆAƒvØz‰zœ"Ÿ*™*¨4ˆzÐ0Ð0Ü
+1ŽXˆÜsÑ%Šñ à:‰:”b—j‘jÓ!Ð!r   c           
+     ó<
+  • [         R                  " U [         R                  S9n[         R                  " U5      n[         R                  " U5      (       a(  [        UR                  5      S:  d  [        U5      S::  a  UR                  [         R                  SS9$ [        [        U5      S5      n[        U[        SUS-  5      SS	9nXG-
+  n[         R                  X…) '   U[         R                  " U5         n	U	R                  S
+:  a  UR                  [         R                  SS9$ [        [         R                  " [         R                  " U	[         R                  " U	5      -
+  5      5      5      n
+[         R                  " U
+5      (       a  U
+S::  a  UR                  [         R                  SS9$ UR                  u  p¼[         R                   " U4[         R                  S9n
+[#        U5       HÉ  nXŽSS24   n[         R                  " U5      nUR%                  5       U:  a  M7  [        [         R                  " UU   5      5      n[        [         R                  " [         R                  " UU   U-
+  5      5      5      n[        U5      S
+U
+-  :”  d  M¦  USU
+-  :  d  M±  [         R                  " U5      XÞ'   MË     [         R                   " U4[         R                  S9n[#        U5       HË  nUSS2U4   n[         R                  " U5      nUR%                  5       U:  a  M8  [        [         R                  " UU   5      5      n[        [         R                  " [         R                  " UU   U-
+  5      5      5      n[        U5      S
+U
+-  :”  d  M§  USU
+-  :  d  M²  [         R                  " U5      UU'   MÍ     [         R                  " U
+5      (       d9  [         R                  " U5      (       d  UR                  [         R                  SS9$ [         R&                  " [         R                  " U
+5      S:„  U
+[)        XÖ5      -
+  S5      R                  [         R                  5      n
+[         R&                  " [         R                  " U5      S:„  U[)        UU5      -
+  S5      R                  [         R                  5      nU
+SS2S4   USSS24   -   nU[         R                  " U5      U-  -
+  n[         R                  UU) '   UR                  [         R                  5      $ )a  Conservative axis-banding suppression.
+
+Only remove row/column offsets when they are broad and nearly uniform across most of the
+row/column. This avoids the earlier failure mode where one local anomaly changed the whole
+row median/column median and then got painted across the raster.
+r   é   r   Tr   r   r   é   ©r+   rR   é   gíµ ÷Æ°>Ng      @gÍÌÌÌÌÌä?)r	   r
+   r   r
+   r"   ÚminÚshaper;   r!   r   r    rU   r$   ÚsizeÚ	nanmedianÚabsÚzerosrQ   Úmeanr%   r6   )rC   ÚstrengthÚ
+smooth_radiusÚsupport_fracr   r.   ÚsrÚbaseÚresidÚfiniteÚ
+global_madÚhÚwÚ	row_shiftÚyr/   ÚokÚmedÚmadÚ	col_shiftr*   Úbandr   s                          r   Údestripe_axis_bandingrs   c   s¯  € ô 	
+Š
+3œbŸj™jÑ)€AÜKŠK˜‹N€EÜ
+6Š6%=‰=œC §¡›L¨1Ó,´°h³À3Ó0FØx‰xœŸ
+™
+¨ˆxÐ.Ð.ä	ŒSÓ
+ Ó	#€BÜ˜Q¤s¨1¨b°A©g£¸qÑA€DØ
+‰H€EÜ—F‘F€Eˆ&MØ
+”2—;’;˜uÓ%Ñ
+&€FØ
+‡{{RÓØx‰xœŸ
+™
+¨ˆxÐ.Ð.Ü”r—|’|¤B§F¢F¨6´B·L²LÀÓ4HÑ+HÓ$IÓJÓK€JÜ
+;Š;z×"Ñ" j°DÓ&8Øx‰xœŸ
+™
+¨ˆxÐ.Ð.à7‰7D€AÜ—’˜!˜¤R§Z¡ZÑ0€IÜ
+1ŽXˆØ
+’a4‰[ˆÜ
+[Š[˜‹_ˆØ
+7‰7‹9|Ó#ÙÜ”B—L’L  B¡Ó(Ó)ˆÜ”B—L’L¤§¢¨¨2©°©Ó!5Ó6Ó7ˆÜˆs‹8c˜JÑ&Õ&¨3°¸
+Ñ1BÕ+BÜŸ:š: c›?ˆI‹Lñ ô —’˜!˜¤R§Z¡ZÑ0€IÜ
+1ŽXˆØ
+’1a4‰[ˆÜ
+[Š[˜‹_ˆØ
+7‰7‹9|Ó#ÙÜ”B—L’L  B¡Ó(Ó)ˆÜ”B—L’L¤§¢¨¨2©°©Ó!5Ó6Ó7ˆÜˆs‹8c˜JÑ&Õ&¨3°¸
+Ñ1BÕ+BÜŸ:š: c›?ˆIa‹Lñ ô 6Š6)×Ñ¤R§V¢V¨I×%6Ñ%6Øx‰xœŸ
+™
+¨ˆxÐ.Ð.ä—’œŸš 	Ó*¨SÑ0°)¼mÈIÓ>ZÑ2ZÐ\_Ó`×gÑgÔhj×hrÑhrÓs€IÜ—’œŸš 	Ó*¨SÑ0°)¼mÈIÐWYÓ>ZÑ2ZÐ\_Ó`×gÑgÔhj×hrÑhrÓs€IØ’Q˜WÑ 	¨$²¨'Ñ 2Ñ2€DØ
+ŒbjŠj˜Ó" TÑ)Ñ
+)€CÜ—&‘&€CˆˆKØ:‰:”b—j‘jÓ!Ð!r   c           
+     ó¸  • [         R                  " U [         R                  S9n[         R                  " U5      n[         R                  " U5      (       d#  [         R
+                  " U[         R                  S9$ [
+        [         R                  " X   5      5      n[        XS9n[        USSS9n[         R                  " UR                  [         R                  5      5      u  pV[         R                  " Xf-  XU-  -   5      R                  [         R                  5      n[        US[        S[        UR                   5      S-  5      S	9n[         R"                  Xr) '   U$ )
+Nr   )r   r   r   rY   çš™™™™™¹?rW   rZ   ©rb   rc   )r	   r
+   r   r
+   r"   r9   r;   r^   r   rU   Úgradientr!   Úsqrtrs   r   r[   r\   r$   )rC   r   r.   r   ÚaaÚgyÚgxr   s           r   Úgradient_magnituder|       sê   € Ü
+
+Š
+3œbŸj™jÑ)€AÜKŠK˜‹N€EÜ
+6Š6%=‰=Ü}Š}˜Q¤b§j¡jÑ1Ð1Ü”—’˜a™hÓ'Ó(€DÜ	QÑ	"€BÜ	˜2 a°Ñ	2€BÜ
+[Š[˜Ÿ™¤2§:¡:Ó.Ó
+/F€BÜ
+'Š'"‘'˜B™GÑ#Ó
+$×
++Ñ
++¬B¯J©JÓ
+7€CÜ
+ ¨dÄ#ÀaÌÈQÏWÉWËÐY[ÑI[ÓB\Ñ
+]€CÜ—&‘&€CˆKØ€Jr   c           	     ó  • [         R                  " U [         R                  S9n[         R                  " U5      n[         R                  " U5      (       d#  [         R
+                  " U[         R                  S9$ [
+        U[        US5      SS9n[
+        U[        US5      SS9nXV-
+  n[        US[        SSU-  S-   5      S9n[        U5      n[
+        USSS9n[        US	[        SSU-  S-   5      S9n[        US
+SSS
+9n	U	R                  S   S:¼  aS  U	R                  S   S:¼  a@  U	SSS24   U	SSS24'   U	SSS24   U	SSS24'   U	SS2S4   U	SS2S4'   U	SS2S4   U	SS2S4'   U	R                  [         R                  5      $ )a0  BOA-inspired front detector with anti-banding safeguards.
+
+The main failure mode on small/coarse AOIs is axis-aligned striping amplified by
+local background removal. We smooth first, subtract a broader background, and then
+remove row/column-only high-frequency components before the final normalization.
+r   r   r   rY   ru   rW   é   rv   r8   ç      .@ç      W@çü©ñÒMb@?©r@   rA   rB   r   rX   Néþÿÿÿéÿÿÿÿ)
+r	   r
+   r   r
+   r"   r9   rU   r   rs   r|   rI   r\   r!   )
+rC   Údenoise_radiusÚbackground_radiusr   r.   ÚsmÚbgÚanomÚfrontr   s
+             r   Ú	boa_frontr‹   ¯   si  € ô 	
+Š
+3œbŸj™jÑ)€AÜKŠK˜‹N€EÜ
+6Š6%=‰=Ü}Š}˜Q¤b§j¡jÑ1Ð1Ü	˜1¤S¨¸Ó%;ÀAÑ	F€BÜ	˜2¤cÐ*;¸QÓ&?ÈÑ	J€BØ
+‰7€DÜ  °ÄCÈÈ1ÐO`ÑK`ÐcdÑKdÓDeÑf€DÜ˜tÓ$€EÜ˜e¨A°aÑ8€EÜ! %°$ÄcÈ!ÈQÐQbÑMbÐefÑMfÓFgÑh€EÜ
+˜5 t°$ÀÑ
+F€CØ
+‡yy|qÓ˜SŸY™Y q™\¨QÓ.Ø˜š1˜‘IˆˆAŠqˆD‰	Ø˜šQ˜‘ZˆˆB’ˆE‰
+Øš˜1˜‘IˆŠAˆqˆD‰	Øš˜B˜‘ZˆŠAˆrˆE‰
+Ø:‰:”b—j‘jÓ!Ð!r   c           
+     óŠ  • U (       d  [        S5      e[        R                  " U  Vs/ s H&  n[        R                  " U[        R                  S9PM(     snSS9n[        R
+                  " USS9R
+                  [        R                  5      n[        [        USSS9S[        S[        UR                  5      S	-  5      S
+9$ s  snf )Nzfront_stack must not be emptyr   r   ©Úaxisr   rY   ç¸…ëQ¸®?rW   rZ   rv   )Ú
+ValueErrorr	   Ústackr
+   r   Únanmeanr!   rs   rU   r   r[   r\   )Úfront_stackr*   r‘   r   s       r   Úfront_persistencer”   Ê   s­   € ÞÜÐ8Ó9Ð9ÜHŠH¹{ÓKº{¸!”b—j’j ¬"¯*©*Ô5¹{ÑKÐRSÑT€EÜ
+*Š*U Ñ
+#×
+*Ñ
+*¬2¯:©:Ó
+6€CÜ Ô!2°3¸qÈÑ!KÐVZÔjmÐnoÔqtÐux×u~Ñu~Óqð  BDñ  rDó  kEñ  Fð  Fùò Ls   §-C c                óö  • SSSSSS.n[        U5      nU(       a  UR                  U5        [        R                  " U [        R                  5      [        R                  " U[        R                  5      [        R                  " U[        R                  5      Ub%  [        R                  " U[        R                  5      OS Ub%  [        R                  " U[        R                  5      OS S.nSn	[        R
+                  " U [        R                  S9n
+UR
+                  5        H~  u  p¼Uc  M
+  [        [        UR                  US5      5      S5      n
+U
+S::  a  M7  [        US	S	S
+9nUS;   a+  [        US[        S
+[        UR                  5      S-  5      S9nX­U-  -
+  n
+X-
+  n	M€     U	S::  a  [        U 5      $ X©-  n
+[        U
+S	SS
+9n
+[        U
+S[        S
+[        U
+R                  5      S-  5      S9n
+[        U
+SSSS9$ )Ng¸…ëQ¸Þ?g{®GázÄ?g
+×£p=
+Ç?gìQ¸…ëÁ?g{®Gáz¤?)ÚsstÚchlÚsshÚ
+persist_3dÚ
+persist_7dr   r   r   rY   >   r—   r˜   rš   r   rW   rZ   rv   r   çš™™™™™©?é   r   r€   r   r‚   )ÚdictÚupdater	   r
+   r   r9   Úitemsr   r;   ÚgetrU   rs   r[   r\   rI   )Ú
+front_boa_sstÚfront_boa_logchlÚ	front_sshÚfront_persist_3dÚfront_persist_7drL   Ú	default_wrk   ÚfieldsÚtotalr   ÚkeyrC   ÚweightÚcleans                  r   Úfuse_frontsr¬   Ò   s«  € ð  T°$ÀdÐZ^Ñ_€IÜˆY‹€AÞØ	‰ÔäzŠz˜-¬¯©Ó4ÜzŠzÐ*¬B¯J©JÓ7ÜzŠz˜)¤R§Z¡ZÓ0ØBRÑB^”b—j’jÐ!1´2·:±:Ô>ÐdhØBRÑB^”b—j’jÐ!1´2·:±:Ô>Ðdhñ€Fð 
+€EÜ
+-Š-˜
+¬R¯Z©ZÑ
+8€CØ—L‘L–N‰ˆØ‰;ÙÜ”U˜1Ÿ5™5  c›?Ó+¨SÓ1ˆØS‹=ÙÜ! #¨a¸Ñ:ˆØÐ.Ó.Ü)¨%¸$ÌcÐRSÔUXÐY^×YdÑYdÓUeÐgiÑUiÓNjÑkˆEØ˜‰~ÑˆØ
+‰Šñ #ð 
+ƒ|Ü 
+Ó.Ð.Ø
+
+‰+€CÜ
+˜C¨°!Ñ
+4€CÜ
+ ¨dÄ#ÀaÌÈSÏYÉYËÐY[ÑI[ÓB\Ñ
+]€CÜ˜C d°ÀÑEÐEr   c           
+     óš  • [        [        R                  " U [        R                  5      SSS9n[        [        R                  " U[        R                  5      SSS9nU[        USSS9-
+  nU[        USSS9-
+  nSXD-  XU-  -   -  R	                  [        R                  5      n[        US[
+        S[        UR                  5      S-  5      S9$ )	Nr   r   rY   ç      à?r›   rW   rœ   rv   )	rU   r	   r
+   r   r!   rs   r   r[   r\   )ÚuÚvÚuur/   Úuu_aÚvv_ar   s          r   Úcompute_eker´   û   sª   € Ü	œ2Ÿ:š: a¬¯©Ó4¸QÀqÑ	I€BÜ	œ2Ÿ:š: a¬¯©Ó4¸QÀqÑ	I€BØ
+Ô! "¨Q°qÑ9Ñ9€DØ
+Ô! "¨Q°qÑ9Ñ9€DØ$‘+ ¡Ñ+Ñ,×
+4Ñ
+4´R·Z±ZÓ
+@€CÜ  ¨tÄ3ÀqÌ#ÈcÏiÉiË.ÐZ\ÑJ\ÓC]Ñ^Ð^r   c           
+     óJ  • [        [        U 5      SSS9n[        [        U5      SSS9n[        R                  " U5      u  pE[        R                  " U5      u  pgXt-
+  R	                  [        R
+                  5      n[
+        US[        S[        UR                  5      S-  5      S9$ ©Nr   r   rY   r›   rW   rœ   rv   )
+rU   r   r	   rw   r!   r   rs   r   r[   r\   )	r¯   r°   r±   r/   Údu_dyÚdu_dxÚdv_dyÚdv_dxr   s	            r   Úcompute_vorticityr»     s~   € Ü	œ; q›>°!¸AÑ	>€BÜ	œ; q›>°!¸AÑ	>€BÜ—;’;˜r“?L€EÜ—;’;˜r“?L€EØ‰=×
+ Ñ
+ ¤§¡Ó
+,€CÜ  ¨tÄ3ÀqÌ#ÈcÏiÉiË.ÐZ\ÑJ\ÓC]Ñ^Ð^r   c           
+     óŒ  • [        [        U 5      SSS9n[        [        U5      SSS9n[        R                  " U5      u  pE[        R                  " U5      u  pgXV-
+  nXt-   n	[        R                  " Xˆ-  X™-  -   5      R                  [        R                  5      n
+[        U
+S[        S[        U
+R                  5      S-  5      S9$ r¶   )rU   r   r	   rw   rx   r!   r   rs   r   r[   r\   )r¯   r°   r±   r/   r·   r¸   r¹   rº   Ús1Ús2r   s              r   Úcompute_strainr¿   
+  sœ   € Ü	œ; q›>°!¸AÑ	>€BÜ	œ; q›>°!¸AÑ	>€BÜ—;’;˜r“?L€EÜ—;’;˜r“?L€EØ	‰€BØ	‰€BÜ
+'Š'"‘'˜B™GÑ#Ó
+$×
++Ñ
++¬B¯J©JÓ
+7€CÜ  ¨tÄ3ÀqÌ#ÈcÏiÉiË.ÐZ\ÑJ\ÓC]Ñ^Ð^r   c           
+     ó8  • [         R                  " U [         R                  5      n[         R                  " U[         R                  5      nX3-  X"-  -
+  R                  [         R                  5      n[	        US[        S[
+        UR                  5      S-  5      S9$ )Nr›   rW   rœ   rv   )r	   r
+   r   r!   rs   r   r[   r\   )Ú	vorticityÚstrainÚvortÚstr   s        r   Úcompute_okubo_weissrÅ     sk   € Ü
+:Š:i¤§¡Ó,€DÜ	ŠFœBŸJ™JÓ	'€BØ
+‰7T‘[Ñ ×
+(Ñ
+(¬¯©Ó
+4€CÜ  ¨tÄ3ÀqÌ#ÈcÏiÉiË.ÐZ\ÑJ\ÓC]Ñ^Ð^r   c                óú  • [         R                  " U [         R                  5      n[         R                  " [         R                  " U5      5      (       a7  [        [         R                  " U[         R                  " U5         S5      5      OSnX#:  nUbI  [        [         R                  " [         R                  " U[         R                  5      5      5      nXES:„  -  nUR                  [         R                  5      $ )Né   r   çffffffÖ?)r	   r
+   r   r"   r
+   r;   r:   rI   r_   r!   Úuint8)Úokubo_weissr˜   ÚowÚthrÚmaskÚamps         r   Údetect_eddy_maskrÏ     s¡   € Ü	ŠK¤§¡Ó	,€BÜ>@¿fºfÄRÇ[Â[ÐQSÃ_×>UÑ>UŒ%”× Ò  ¤B§K¢K°£OÑ!4°bÓ9Ô
+:Ð[^€CØ
+‰8€DØ
+ÜœrŸvšv¤b§j¢j°´b·j±jÓ&AÓBÓCˆØ˜T‘zÑ"ˆØ;‰;”r—x‘xÓ Ð r   c           	     óà  • [         R                  " U 5      R                  [        5      nUR                  u  p#[         R
+                  " S5      n[         R                  " X#4U[         R
+                  S9nSXQ'   [         R
+                  " [        R                  " S5      5      n[        U5       H˜  n[        U5       H†  nXWU4   n	US:”  aW  [        X•US-
+  U4   S-   5      n	US:”  a  [        X•US-
+  US-
+  4   U-   5      n	US-   U:  a  [        X•US-
+  US-   4   U-   5      n	US:”  a  [        X•XxS-
+  4   S-   5      n	X•Xx4'   Mˆ     Mš     [        US-
+  SS5       H£  n[        US-
+  SS5       HŒ  nXWU4   n	US-   U:  aW  [        X•US-   U4   S-   5      n	US:”  a  [        X•US-   US-
+  4   U-   5      n	US-   U:  a  [        X•US-   US-   4   U-   5      n	US-   U:  a  [        X•XxS-   4   S-   5      n	X•Xx4'   MŽ     M¥     [         R                  " U5      n
+[         R                  " U
+5      (       a  [         R                  " XZ   5      XZ) '   OSUS S & UR                  [         R
+                  5      $ )	Ng    eÍÍAr   r   g       @r   r   r   r„   )r	   r
+   r!   Úboolr\   r   ÚfullÚmathrx   rQ   r[   r
+   r"   r=   )rÍ   Úmrj   rk   ÚinfÚdistÚroot2rm   r*   Úbestrh   s              r   Údistance_to_maskrÙ   )  sY  € Ü
+
+Š
+4Ó×Ñ¤Ó%€AØ7‰7D€AÜ
+*Š*S‹/€CÜ
+7Š7A6˜3¤b§j¡jÑ1€DØ€DGÜJŠJ”t—y’y “~Ó&€EÜ
+1ŽXˆÜq–ˆAØ˜1˜‘:ˆDØ1‹uÜ˜4 a¨!¡e¨Q h¡°#Ñ!5Ó6Øq“5Ü˜t¨!¨a©%°°Q±¨,Ñ%7¸%Ñ%?Ó@DØq‘5˜1“9Ü˜t¨!¨a©%°°Q±¨,Ñ%7¸%Ñ%?Ó@DØ1‹uÜ˜4 a¨Q© h¡°#Ñ!5Ó6Ø‹Jó ñ ô 1q‘5˜"˜bÖ
+!ˆÜq˜1‘u˜b "Ö%ˆAØ˜1˜‘:ˆDØ1‰uq‹yÜ˜4 a¨!¡e¨Q h¡°#Ñ!5Ó6Øq“5Ü˜t¨!¨a©%°°Q±¨,Ñ%7¸%Ñ%?Ó@DØq‘5˜1“9Ü˜t¨!¨a©%°°Q±¨,Ñ%7¸%Ñ%?Ó@DØ1‰uq‹yÜ˜4 a¨Q© h¡°#Ñ!5Ó6Ø‹Jó &ñ "ô [Š[˜Ó
+€FÜ	‡v‚vˆf‡~~ÜŸ	š	 $¡,Ó/ˆˆWŠ
+àˆ‰QˆØ;‰;”r—z‘zÓ"Ð"r   c                ó0   • [        [        U S:„  5      5      $ )Nr   )rI   rÙ   )rÍ   s    r   Úcompute_eddy_edge_distancerÛ   P  s   € ÜÔ,¨T°A©XÓ6Ó7Ð7r   c           	     óø  • UR                  U5      n[        SU[        [        U5      S5      -
+  S-   5      nXUS-    nU Vs/ s H6  oƒX   ;   d  M  [        R                  " X   U   [        R
+                  5      PM8     n	nU	(       aE  [        R                  " [        R                  " U	SS9SS9R                  [        R
+                  5      $ [        R                  " X   U   [        R
+                  5      $ s  snf )Nr   r   r   )	Úindexr   r    r	   r
+   r   r’   r‘   r!   )
+Ú
+layers_by_tidÚordered_time_idsÚcurrent_tidr©   Úwindow_stepsÚidxrD   ÚtidsÚtidr‘   s
+             r   Úrolling_meanrå   T  sî   € Ø
+×
+ Ñ
+  Ó
+-€CÜ	ˆQ”cœ#˜lÓ+¨QÓ/Ñ/°!Ñ3Ó	4€BØ˜s Q™wÐ'€DÙHLÓjÊÀÐWdÑWiÑPiÓ
+<ŒRZŠZ˜
+Ñ*¨3Ñ/´·±Ö
+<É€EÐjÞMRŒ2:Š:”b—h’h˜u¨1Ñ-°AÑ6×=Ñ=¼b¿j¹jÓIð  PÔXZ×XbÒXbÐcpÑc}ð  Bñ  dCô  EG÷  EOñ  EOó  YPð  Pùò 
+ks   ÁC7Á.C7c                óª   • [        [        R                  " U [        R                  5      [        R                  " U[        R                  5      -
+  5      $ ©N©rI   r	   r
+   r   )rC   Úbaselines     r   Úanomalyrê   \  s0   € ÜœBŸJšJ s¬B¯J©JÓ7¼"¿*º*ÀXÌrÏzÉzÓ:ZÑZÓ[Ð[r   c                óÜ  • [         R                  " U [         R                  5      n[         R                  " U5      n[         R                  " U5      (       d#  [         R
+                  " U[         R                  S9$ [
+        [         R                  " U5      5      n[
+        [        [         R                  " U5      S5      5      n[         R                  " SX-
+  U-  S-  -  5      n[        U5      $ ©Nr   ç      @ç      à¿r   ©r	   r
+   r   r
+   r"   r9   r;   r^   r   r>   ÚexprI   ©Úmldr*   r.   ro   Úsigr   s         r   Ú	score_mldrô   `  ó™   € Ü
+
+Š
+3œŸ
+™
+Ó#€AÜKŠK˜‹N€EÜ
+6Š6%=‰=Ü}Š}˜Q¤b§j¡jÑ1Ð1Ü
+”—’˜Q“Ó
+ €CÜ
+””B—I’I˜a“L #Ó&Ó
+'€CÜ
+&Š&˜!™' S™¨QÑ.Ñ.Ó
+/€CÜ˜CÓ Ð r   c                ó^   • [        [        R                  " U [        R                  5      5      $ rç   rè   )Úo2s    r   Úscore_o2rø   k  s   € ÜœBŸJšJ r¬2¯:©:Ó6Ó7Ð7r   c                óÜ  • [         R                  " U [         R                  5      n[         R                  " U5      n[         R                  " U5      (       d#  [         R
+                  " U[         R                  S9$ [
+        [         R                  " U5      5      n[
+        [        [         R                  " U5      S5      5      n[         R                  " SX-
+  U-  S-  -  5      n[        U5      $ )Nr   g      Ð?rî   r   rï   )Ússsr*   r.   Úmuró   r   s         r   Ú	score_sssrü   o  s™   € Ü
+
+Š
+3œŸ
+™
+Ó#€AÜKŠK˜‹N€EÜ
+6Š6%=‰=Ü}Š}˜Q¤b§j¡jÑ1Ð1Ü	Œr|Š|˜A‹Ó	€BÜ
+””B—I’I˜a“L $Ó'Ó
+(€CÜ
+&Š&˜!™& C™¨AÑ-Ñ-Ó
+.€CÜ˜CÓ Ð r   c                óØ   • [        U 5      n[        U5      n[        U5      n[        R                  " SU-  SU-  -   SU-  -   SS5      R                  [        R                  5      nXcXES.4$ )NrÈ   gÍÌÌÌÌÌÜ?çš™™™™™É?r   r   )Ú	mld_scoreÚo2_scoreÚ	sss_score)rô   rø   rü   r	   r?   r!   r   )rò   r÷   rú   ÚsmldÚso2Ússssr   s          r   Úvertical_accessr  z  sb   € ÜS‹>€DÜ
+2‹,€CÜS‹>€DÜ
+'Š'$˜‘+  s¡
+Ñ*¨T°D©[Ñ8¸#¸sÓ
+C×
+JÑ
+JÌ2Ï:É:Ó
+V€CØ°ÑGÐGÐGr   c                óæ  • [         R                  " U [         R                  5      n[         R                  " U[         R                  5      n[         R                  " X"-  X3-  -   5      R	                  [         R                  5      n[         R
+                  " [         R                  " X25      5      S-   S-  nUR	                  [         R                  5      UR	                  [         R                  5      4$ )Ng     €v@)r	   r
+   r   rx   r!   ÚdegreesÚarctan2)Úu10Úv10r¯   r°   ÚspeedÚ	directions         r   Úwind_speed_dirr
+  ‚  s—   € Ü
+
+Š
+3œŸ
+™
+Ó#€AÜ
+
+Š
+3œŸ
+™
+Ó#€AÜGŠGA‘E˜A™E‘MÓ"×)Ñ)¬"¯*©*Ó5€EÜ—’œBŸJšJ qÓ,Ó-°Ñ5¸Ñ>€IØ<‰<œŸ
+™
+Ó# Y×%5Ñ%5´b·j±jÓ%AÐAÐAr   c                ó(  • [         R                  " U [         R                  5      nSX-   -  n[        X!-
+  S-  S5      nSS[         R                  " X4-
+  U-  5      -   -  n[         R
+                  " USS5      R
+                  [         R                  5      $ )Nr®   g      @g      è?r   r   )r	   r
+   r   r   rð   r?   r!   )r  Úsoft_minÚsoft_maxÚwsÚmidÚscaler   s          r   Úwind_penaltyr  Š  sx   € Ü	ŠEœ2Ÿ:™:Ó	&€BØ
+
+Ñ$Ñ
+%€CÜÑ$¨Ñ+¨TÓ2€EØ
+
+”r—v’v˜r™x¨5Ñ0Ó1Ñ1Ñ
+2€CÜ
+7Š73˜˜SÓ!×(Ñ(¬¯©Ó4Ð4r   c                óÜ  • [         R                  " U [         R                  5      n[         R                  " U5      n[         R                  " U5      (       d#  [         R
+                  " U[         R                  S9$ [
+        [         R                  " U5      5      n[
+        [        [         R                  " U5      S5      5      n[         R                  " SX-
+  U-  S-  -  5      n[        U5      $ rì   rï   rñ   s         r   Úthermocline_proxyr  ’  rõ   r   )r   )r   ú
+np.ndarrayr   r;   Úreturnr  )r*   r  r+   r    r  r  )rí   g     ÀW@g-Cëâ6?)
+r   r  r@   r;   rA   r;   rB   r;   r  r  )r   )rC   r  r+   r    r  r  )r   r   )rC   r  r+   r    rR   r    r  r  )rþ   rW   gš™™™™™é?)
+rC   r  rb   r;   rc   r    rd   r;   r  r  )rC   r  r  r  )r   rX   )rC   r  r…   r    r†   r    r  r  )r“   zSequence[np.ndarray]r  r  rç   )r¡   r  r¢   r  r£   r  r¤   únp.ndarray | Noner¥   r  rL   zDict[str, float] | Noner  r  )r¯   r  r°   r  r  r  )rÁ   r  rÂ   r  r  r  )rÊ   r  r˜   r  r  r  )rÍ   r  r  r  )rÞ   z Dict[str, Dict[str, np.ndarray]]rß   z
+Sequence[str]rà   Ústrr©   r  rá   r    r  r  )rC   r  ré   r  r  r  )rò   r  r  r  )r÷   r  r  r  )rú   r  r  r  )rò   r  r÷   r  rú   r  r  z(tuple[np.ndarray, Dict[str, np.ndarray]])r	  r  r
+  r  r  ztuple[np.ndarray, np.ndarray])rí   g      (@)r  r  r  r;   r  r;   r  r  )"Ú
+__future__r   Útypingr   r   rÓ   Únumpyr	   r   r6   rI   rO   rU   rs   r|   r‹   r”   r¬   r´   r»   r¿   rÅ   rÏ   rÙ   rÛ   rå   rê   rô   rø   rü   r  r
+  r  r  © r   r   Ú<module>r     s`  ðÝ "ç !Û Û öô"ð0 ØØð	5Øð5à
+ð5ð ð5ð ð	5ð
+ õ5ö8"ö0"ð ØØð	:"Ø	ð:"àð:"ð ð:"ð ð	:"ð
+ õ:"ôzö"ô6Fð (,ð
+&FØð&Fà ð&Fð ð&Fð (ð	&Fð
+ (ð&Fð %ð
+&Fð õ&FôR_ô_ô_ô_ö!ô$#ôN8ôPô\ô!ô8ô!ôHôBö5õ!r   
