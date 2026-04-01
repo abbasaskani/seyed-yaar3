@@ -2020,9 +2020,6 @@ async function resolveLatestBase(){
     "docs/latest",
     "./docs/latest",
     "../docs/latest",
-    "latest",
-    "./latest",
-    "../latest",
   ];
   let lastErr = null;
   for (const base of candidates) {
@@ -2035,7 +2032,7 @@ async function resolveLatestBase(){
       lastErr = err;
     }
   }
-  throw lastErr || new Error("Could not resolve docs/latest/meta_index.json");
+  throw lastErr || new Error("Could not resolve docs/latest/meta_index.json (docs-only mode)");
 }
 
 function latestUrl(rel){
