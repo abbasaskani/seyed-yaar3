@@ -34,6 +34,7 @@ from ..models.ensemble import ensemble_stats
 from ..models.ocean_features import (
     anomaly,
     boa_front,
+    box_mean,
     compute_eddy_edge_distance,
     compute_eke,
     compute_okubo_weiss,
@@ -267,41 +268,38 @@ def _read_nc_vars(path: Path, variables: Sequence[str]) -> Dict[str, np.ndarray]
     return out
 
 
-def _resize_bilinear_nan(a: np.ndarray, target_h: int, target_w: int) -> np.ndarray:
+def _resize_nearest(a: np.ndarray, target_h: int, target_w: int) -> np.ndarray:
     src_h, src_w = a.shape
-    arr = np.asarray(a, dtype=np.float32)
     if src_h == target_h and src_w == target_w:
-        return arr.astype(np.float32, copy=False)
+        return a.astype(np.float32, copy=False)
+    yi = np.rint(np.linspace(0, src_h - 1, target_h)).astype(np.int64)
+    xi = np.rint(np.linspace(0, src_w - 1, target_w)).astype(np.int64)
+    return a[np.ix_(yi, xi)].astype(np.float32, copy=False)
 
-    y = np.linspace(0.0, src_h - 1, target_h, dtype=np.float32)
-    x = np.linspace(0.0, src_w - 1, target_w, dtype=np.float32)
-    y0 = np.floor(y).astype(np.int64)
-    x0 = np.floor(x).astype(np.int64)
-    y1 = np.clip(y0 + 1, 0, src_h - 1)
-    x1 = np.clip(x0 + 1, 0, src_w - 1)
-    wy = (y - y0).astype(np.float32)
-    wx = (x - x0).astype(np.float32)
 
-    out = np.empty((target_h, target_w), dtype=np.float32)
-    for i in range(target_h):
-        top0 = arr[y0[i], x0]
-        top1 = arr[y0[i], x1]
-        bot0 = arr[y1[i], x0]
-        bot1 = arr[y1[i], x1]
+def _interp1d_nan(values: np.ndarray, new_len: int) -> np.ndarray:
+    vals = np.asarray(values, dtype=np.float32)
+    n = vals.shape[0]
+    if n == new_len:
+        return vals.astype(np.float32, copy=False)
+    xp = np.arange(n, dtype=np.float32)
+    xnew = np.linspace(0.0, float(n - 1), int(new_len), dtype=np.float32)
+    valid = np.isfinite(vals)
+    if not np.any(valid):
+        return np.full((new_len,), np.nan, dtype=np.float32)
+    if int(valid.sum()) == 1:
+        out = np.full((new_len,), float(vals[valid][0]), dtype=np.float32)
+        return out
+    return np.interp(xnew, xp[valid], vals[valid]).astype(np.float32)
 
-        w00 = (1.0 - wy[i]) * (1.0 - wx)
-        w01 = (1.0 - wy[i]) * wx
-        w10 = wy[i] * (1.0 - wx)
-        w11 = wy[i] * wx
 
-        vals = np.stack([top0, top1, bot0, bot1], axis=0)
-        ws = np.stack([w00, w01, w10, w11], axis=0).astype(np.float32)
-        valid = np.isfinite(vals)
-        num = np.sum(np.where(valid, vals * ws, 0.0), axis=0)
-        den = np.sum(np.where(valid, ws, 0.0), axis=0)
-        row = num / np.maximum(den, 1e-9)
-        row[den <= 1e-9] = np.nan
-        out[i] = row.astype(np.float32)
+def _resize_bilinear_nan(a: np.ndarray, target_h: int, target_w: int) -> np.ndarray:
+    src = np.asarray(a, dtype=np.float32)
+    src_h, src_w = src.shape
+    if src_h == target_h and src_w == target_w:
+        return src.astype(np.float32, copy=False)
+    tmp = np.vstack([_interp1d_nan(src[r, :], target_w) for r in range(src_h)]).astype(np.float32)
+    out = np.vstack([_interp1d_nan(tmp[:, c], target_h) for c in range(target_w)]).T.astype(np.float32)
     return out
 
 
@@ -748,10 +746,26 @@ def run_daily(
         provider_status: List[Dict[str, Any]] = []
         front_base_q: Deque[np.ndarray] = deque(maxlen=max(front7_steps, front3_steps, 1))
 
+        QUALITY_FIX_VERSION = "2026-04-01-output-quality-v3"
+
         for ts_iso in ts_list:
             tid = id_by_iso[ts_iso]
             tdir = times_root / tid
-            if (not force) and (tdir / "pcatch_scoring_f32.bin").exists():
+            version_marker = tdir / "_quality_version.txt"
+            required_outputs = [
+                tdir / "phab_f32.bin",
+                tdir / "phab_frontplus_f32.bin",
+                tdir / "front_f32.bin",
+                tdir / "conf_f32.bin",
+                tdir / "qc_chl_u8.bin",
+            ]
+            skip_ok = False
+            if not force and version_marker.exists():
+                try:
+                    skip_ok = version_marker.read_text(encoding="utf-8").strip() == QUALITY_FIX_VERSION and all(p.exists() for p in required_outputs)
+                except Exception:
+                    skip_ok = False
+            if skip_ok:
                 provider_status.append({"timestamp": ts_iso, "skipped": True, "reason": "already_exists"})
                 continue
             layers = layers_by_tid[tid]
@@ -827,9 +841,9 @@ def run_daily(
             phab, _ = habitat_scoring(inputs, priors=priors, weights=weights)
             pops = ops_feasibility(cur, waves, ops_priors, gear_depth_m=10.0, wind_speed_m_s=ws)
             pcatch = np.clip(phab * pops, 0.0, 1.0).astype(np.float32)
-            front_mult = np.clip(0.96 + 0.10 * front_fused, 0.95, 1.08).astype(np.float32)
-            frontplus = np.clip(pcatch * front_mult, 0.0, 1.0).astype(np.float32)
+            front_mult = np.clip(0.96 + 0.10 * box_mean(front_fused, radius=1), 0.94, 1.08).astype(np.float32)
             phab_frontplus = np.clip(phab * front_mult, 0.0, 1.0).astype(np.float32)
+            frontplus = np.clip(phab_frontplus * pops, 0.0, 1.0).astype(np.float32)
             ens = np.nanmean(np.stack([pcatch, frontplus], axis=0), axis=0).astype(np.float32)
             agree, spread = ensemble_stats([pcatch, frontplus])
 
@@ -849,6 +863,7 @@ def run_daily(
             write_bin_f32(tdir / "waves_f32.bin", waves.astype(np.float32))
             write_bin_u8(tdir / "qc_chl_u8.bin", layers["qc_chl"])
             write_bin_f32(tdir / "conf_f32.bin", layers["conf"])
+            version_marker.write_text(QUALITY_FIX_VERSION, encoding="utf-8")
 
             if flags.write_extended_layers:
                 if eke is not None:
