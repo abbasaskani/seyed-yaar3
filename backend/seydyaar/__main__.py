@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 
@@ -36,7 +37,7 @@ def main() -> None:
     p.add_argument("--future-days", type=int, default=10, help="Future days to include (max 10 recommended)")
     p.add_argument("--step-hours", type=int, default=6, help="Time step in hours")
     p.add_argument("--fast", action="store_true", help="Fast demo (coarser grid, fewer background samples)")
-    p.add_argument("--out", default=str(Path("docs") / "latest"), help="Output folder")
+    p.add_argument("--out", default=str(Path("latest")), help="Output folder")
     p.add_argument("--presence-mode", choices=["auto", "ais", "weak", "csv"], default="auto")
     p.add_argument("--presence-csv", default="", help="CSV path for presence-only points (optional)")
     p.add_argument("--export-cog", action="store_true", help="Write per-time COG GeoTIFFs (larger output)")
@@ -47,9 +48,11 @@ def main() -> None:
     p2.add_argument("--past-days", type=int, default=1, help="Lean default: 1")
     p2.add_argument("--future-days", type=int, default=5, help="Lean default: 5")
     p2.add_argument("--step-hours", type=int, default=12, help="Lean default: 12")
-    p2.add_argument("--out", default=str(Path("docs") / "latest"), help="Output folder")
+    p2.add_argument("--out", default=str(Path("latest")), help="Output folder")
     p2.add_argument("--grid", default="160x160", help="Lean default: 160x160")
     p2.add_argument("--species", default="skipjack", help="Comma-separated species to run (default: skipjack)")
+    p2.add_argument("--aoi-file", default=str(Path("backend") / "config" / "aoi.geojson"), help="Path to AOI GeoJSON")
+    p2.add_argument("--force", action="store_true", help="Force regeneration even if outputs already match the current fingerprint")
 
     args = parser.parse_args()
 
@@ -72,7 +75,10 @@ def main() -> None:
         import json as _json
         from pathlib import Path as _Path
 
-        aoi = _json.loads((_Path("backend/config/aoi.geojson")).read_text(encoding="utf-8"))
+        if args.force:
+            os.environ["SEYDYAAR_FORCE_REGEN"] = "1"
+
+        aoi = _json.loads((_Path(args.aoi_file)).read_text(encoding="utf-8"))
         species_profiles = _json.loads((_Path("backend/config/species_profiles.json")).read_text(encoding="utf-8"))
         species_filter = [s.strip() for s in str(args.species).split(",") if s.strip()]
         run_daily(
