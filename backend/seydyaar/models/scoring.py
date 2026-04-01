@@ -31,9 +31,10 @@ def score_waves_hs(hs_m: np.ndarray, soft_max_m: float = 1.5, softness: float = 
 def front_score(temp_front: np.ndarray, chl_front: np.ndarray, ssh_front: np.ndarray,
                 w_temp: float = 0.5, w_chl: float = 0.25, w_ssh: float = 0.25) -> np.ndarray:
     s = w_temp * temp_front + w_chl * chl_front + w_ssh * ssh_front
-    lo, hi = np.nanpercentile(s, 5), np.nanpercentile(s, 95)
-    out = (s - lo) / (hi - lo + 1e-9)
-    return np.clip(out, 0.0, 1.0).astype(np.float32)
+    # Use robust normalization with a slightly tighter band and soften the top end
+    # so front artifacts do not dominate habitat on compact AOIs.
+    s = robust_normalize(s, lo_q=10.0, hi_q=90.0)
+    return np.sqrt(np.clip(s, 0.0, 1.0)).astype(np.float32)
 
 
 @dataclass
@@ -92,10 +93,14 @@ def habitat_scoring(inputs: HabitatInputs, priors: Dict, weights: Dict) -> Tuple
     for k in list(w.keys()):
         w[k] = max(float(w[k]), 0.0) / total
 
+    # Slightly damp the front contribution in the final blend; front remains
+    # important but should not create visually dominant striping on its own.
+    front_blend = 0.75 * s_front + 0.25 * robust_normalize(s_front, lo_q=20.0, hi_q=80.0)
+
     phab = (
         w.get("temp", 0.0) * s_temp +
         w.get("chl", 0.0) * s_chl +
-        w.get("front", 0.0) * s_front +
+        w.get("front", 0.0) * front_blend +
         w.get("current", 0.0) * s_cur +
         w.get("eke", 0.0) * s_eke +
         w.get("okubo_weiss", 0.0) * s_okubo +
