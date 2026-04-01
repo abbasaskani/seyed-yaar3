@@ -28,22 +28,46 @@ def robust_normalize(a: np.ndarray, lo_q: float = 5.0, hi_q: float = 95.0) -> np
 
 
 def box_mean(arr: np.ndarray, radius: int = 1) -> np.ndarray:
-    """Very light denoise used instead of heavier morphology/CCA-style front methods."""
-    a = _nan_to_num(arr)
+    """NaN-aware 2D box mean using integral images.
+
+    The previous implementation only reduced over rows and sliced columns, which
+    produced axis-aligned artifacts. This version computes a true 2D local mean
+    while preserving NaNs outside valid support.
+    """
+    a = np.asarray(arr, dtype=np.float32)
     r = max(int(radius), 0)
     if r == 0:
-        return a.astype(np.float32, copy=False)
-    pad = np.pad(a, ((r, r), (r, r)), mode="edge")
+        return a.astype(np.float32, copy=True)
+
+    valid = np.isfinite(a)
+    values = np.where(valid, a, 0.0).astype(np.float32)
+    counts = valid.astype(np.float32)
+
+    pad_mode = "edge"
+    vpad = np.pad(values, ((r, r), (r, r)), mode=pad_mode)
+    cpad = np.pad(counts, ((r, r), (r, r)), mode=pad_mode)
+
+    # integral image with leading zero row/col
+    vi = np.pad(vpad, ((1, 0), (1, 0)), mode="constant", constant_values=0).cumsum(axis=0).cumsum(axis=1)
+    ci = np.pad(cpad, ((1, 0), (1, 0)), mode="constant", constant_values=0).cumsum(axis=0).cumsum(axis=1)
+
+    k = 2 * r + 1
     h, w = a.shape
-    out = np.empty_like(a, dtype=np.float32)
-    kernel = 2 * r + 1
-    area = float(kernel * kernel)
+    y0 = np.arange(0, h)
+    x0 = np.arange(0, w)
+    y1 = y0 + k
+    x1 = x0 + k
+
+    out = np.empty((h, w), dtype=np.float32)
     for y in range(h):
-        ys = y
-        ye = y + kernel
-        window = pad[ys:ye]
-        out[y] = np.add.reduce(window, axis=0)[r:r + w] / area
-    return out.astype(np.float32)
+        yy0 = y0[y]
+        yy1 = y1[y]
+        sums = vi[yy1, x1] - vi[yy0, x1] - vi[yy1, x0] + vi[yy0, x0]
+        cnts = ci[yy1, x1] - ci[yy0, x1] - ci[yy1, x0] + ci[yy0, x0]
+        row = sums / np.maximum(cnts, 1.0)
+        row[cnts <= 0] = np.nan
+        out[y] = row.astype(np.float32)
+    return out
 
 
 def gradient_magnitude(arr: np.ndarray) -> np.ndarray:
@@ -53,12 +77,24 @@ def gradient_magnitude(arr: np.ndarray) -> np.ndarray:
 
 
 def boa_front(arr: np.ndarray, denoise_radius: int = 1, background_radius: int = 3) -> np.ndarray:
-    """Cheap BOA-inspired detector: denoise -> local background removal -> gradient -> robust normalize."""
+    """Cheap BOA-inspired detector with guards for small AOIs.
+
+    We denoise, remove a local background, then normalize the gradient. For very
+    flat fields we return a zero front map instead of amplifying quantization or
+    interpolation artifacts.
+    """
     a = np.asarray(arr, dtype=np.float32)
     sm = box_mean(a, radius=max(denoise_radius, 0)) if denoise_radius > 0 else a
     bg = box_mean(sm, radius=max(background_radius, 1))
     anom = sm - bg
-    return robust_normalize(gradient_magnitude(anom))
+    g = gradient_magnitude(anom)
+    valid = np.isfinite(g)
+    if not np.any(valid):
+        return np.zeros_like(g, dtype=np.float32)
+    lo, hi = np.nanpercentile(g[valid], [10, 90])
+    if (not np.isfinite(lo)) or (not np.isfinite(hi)) or abs(float(hi - lo)) <= 1e-6:
+        return np.zeros_like(g, dtype=np.float32)
+    return robust_normalize(g, lo_q=10.0, hi_q=90.0)
 
 
 def front_persistence(front_stack: Sequence[np.ndarray]) -> np.ndarray:
