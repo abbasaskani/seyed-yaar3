@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import deque
 from typing import Dict, Sequence
 import math
 import numpy as np
@@ -12,89 +11,87 @@ def _nan_to_num(a: np.ndarray, fill: float = 0.0) -> np.ndarray:
     return out
 
 
-def robust_normalize(a: np.ndarray, lo_q: float = 5.0, hi_q: float = 95.0) -> np.ndarray:
+def robust_normalize(
+    a: np.ndarray,
+    lo_q: float = 5.0,
+    hi_q: float = 95.0,
+    min_span: float = 1e-4,
+) -> np.ndarray:
     arr = np.asarray(a, dtype=np.float32)
     valid = np.isfinite(arr)
     if not np.any(valid):
         return np.zeros_like(arr, dtype=np.float32)
-    lo, hi = np.nanpercentile(arr[valid], [lo_q, hi_q])
+    vals = arr[valid]
+    lo, hi = np.nanpercentile(vals, [lo_q, hi_q])
     if not np.isfinite(lo):
-        lo = float(np.nanmin(arr[valid]))
+        lo = float(np.nanmin(vals))
     if not np.isfinite(hi):
-        hi = float(np.nanmax(arr[valid]))
-    out = (arr - np.float32(lo)) / np.float32((hi - lo) + 1e-9)
+        hi = float(np.nanmax(vals))
+    span = float(hi - lo)
+    # Avoid stretching tiny numerical noise into harsh visual artifacts.
+    if (not np.isfinite(span)) or span <= max(float(min_span), 0.05 * float(np.nanstd(vals))):
+        out = np.zeros_like(arr, dtype=np.float32)
+        out[~valid] = np.nan
+        return out
+    out = (arr - np.float32(lo)) / np.float32(span)
     out[~valid] = np.nan
     return np.clip(out, 0.0, 1.0).astype(np.float32)
 
 
 def box_mean(arr: np.ndarray, radius: int = 1) -> np.ndarray:
-    """NaN-aware 2D box mean using integral images.
-
-    The previous implementation only reduced over rows and sliced columns, which
-    produced axis-aligned artifacts. This version computes a true 2D local mean
-    while preserving NaNs outside valid support.
-    """
+    """NaN-aware 2D box mean using integral images."""
     a = np.asarray(arr, dtype=np.float32)
     r = max(int(radius), 0)
     if r == 0:
-        return a.astype(np.float32, copy=True)
-
+        return a.astype(np.float32, copy=False)
     valid = np.isfinite(a)
+    if not np.any(valid):
+        return np.zeros_like(a, dtype=np.float32)
     values = np.where(valid, a, 0.0).astype(np.float32)
-    counts = valid.astype(np.float32)
-
-    pad_mode = "edge"
-    vpad = np.pad(values, ((r, r), (r, r)), mode=pad_mode)
-    cpad = np.pad(counts, ((r, r), (r, r)), mode=pad_mode)
-
-    # integral image with leading zero row/col
-    vi = np.pad(vpad, ((1, 0), (1, 0)), mode="constant", constant_values=0).cumsum(axis=0).cumsum(axis=1)
-    ci = np.pad(cpad, ((1, 0), (1, 0)), mode="constant", constant_values=0).cumsum(axis=0).cumsum(axis=1)
-
+    weights = valid.astype(np.float32)
+    pad = ((r, r), (r, r))
+    values = np.pad(values, pad, mode="edge")
+    weights = np.pad(weights, pad, mode="edge")
+    sv = np.pad(values, ((1, 0), (1, 0)), mode="constant").cumsum(0).cumsum(1)
+    sw = np.pad(weights, ((1, 0), (1, 0)), mode="constant").cumsum(0).cumsum(1)
     k = 2 * r + 1
-    h, w = a.shape
-    y0 = np.arange(0, h)
-    x0 = np.arange(0, w)
-    y1 = y0 + k
-    x1 = x0 + k
-
-    out = np.empty((h, w), dtype=np.float32)
-    for y in range(h):
-        yy0 = y0[y]
-        yy1 = y1[y]
-        sums = vi[yy1, x1] - vi[yy0, x1] - vi[yy1, x0] + vi[yy0, x0]
-        cnts = ci[yy1, x1] - ci[yy0, x1] - ci[yy1, x0] + ci[yy0, x0]
-        row = sums / np.maximum(cnts, 1.0)
-        row[cnts <= 0] = np.nan
-        out[y] = row.astype(np.float32)
-    return out
+    sum_win = sv[k:, k:] - sv[:-k, k:] - sv[k:, :-k] + sv[:-k, :-k]
+    cnt_win = sw[k:, k:] - sw[:-k, k:] - sw[k:, :-k] + sw[:-k, :-k]
+    out = np.divide(sum_win, np.maximum(cnt_win, 1.0), dtype=np.float32)
+    out[cnt_win <= 0.0] = np.nan
+    return out.astype(np.float32)
 
 
 def gradient_magnitude(arr: np.ndarray) -> np.ndarray:
-    a = _nan_to_num(arr)
-    gy, gx = np.gradient(a.astype(np.float32))
-    return np.sqrt(gx * gx + gy * gy).astype(np.float32)
+    a = np.asarray(arr, dtype=np.float32)
+    valid = np.isfinite(a)
+    if not np.any(valid):
+        return np.zeros_like(a, dtype=np.float32)
+    fill = float(np.nanmedian(a[valid]))
+    aa = _nan_to_num(a, fill=fill)
+    aa = box_mean(aa, radius=1)
+    gy, gx = np.gradient(aa.astype(np.float32))
+    out = np.sqrt(gx * gx + gy * gy).astype(np.float32)
+    out[~valid] = np.nan
+    return out
 
 
 def boa_front(arr: np.ndarray, denoise_radius: int = 1, background_radius: int = 3) -> np.ndarray:
-    """Cheap BOA-inspired detector with guards for small AOIs.
-
-    We denoise, remove a local background, then normalize the gradient. For very
-    flat fields we return a zero front map instead of amplifying quantization or
-    interpolation artifacts.
-    """
+    """Cheap BOA-inspired detector with extra smoothing to suppress grid artifacts."""
     a = np.asarray(arr, dtype=np.float32)
     sm = box_mean(a, radius=max(denoise_radius, 0)) if denoise_radius > 0 else a
     bg = box_mean(sm, radius=max(background_radius, 1))
     anom = sm - bg
-    g = gradient_magnitude(anom)
-    valid = np.isfinite(g)
-    if not np.any(valid):
-        return np.zeros_like(g, dtype=np.float32)
-    lo, hi = np.nanpercentile(g[valid], [10, 90])
-    if (not np.isfinite(lo)) or (not np.isfinite(hi)) or abs(float(hi - lo)) <= 1e-6:
-        return np.zeros_like(g, dtype=np.float32)
-    return robust_normalize(g, lo_q=10.0, hi_q=90.0)
+    front = gradient_magnitude(anom)
+    front = box_mean(front, radius=1)
+    out = robust_normalize(front, lo_q=10.0, hi_q=90.0, min_span=1e-5)
+    # Suppress border halos caused by background estimation near AOI edges.
+    if out.shape[0] >= 3 and out.shape[1] >= 3:
+        out[0, :] = out[1, :]
+        out[-1, :] = out[-2, :]
+        out[:, 0] = out[:, 1]
+        out[:, -1] = out[:, -2]
+    return out
 
 
 def front_persistence(front_stack: Sequence[np.ndarray]) -> np.ndarray:
@@ -132,26 +129,31 @@ def fuse_fronts(
         total += weight
     if total <= 0.0:
         return robust_normalize(front_boa_sst)
-    return robust_normalize(out / total)
+    out = out / total
+    out = box_mean(out, radius=1)
+    return robust_normalize(out, lo_q=10.0, hi_q=90.0, min_span=1e-5)
 
 
 def compute_eke(u: np.ndarray, v: np.ndarray) -> np.ndarray:
     uu = np.asarray(u, np.float32)
     vv = np.asarray(v, np.float32)
-    return (0.5 * (uu * uu + vv * vv)).astype(np.float32)
+    # Use local anomalies so broad background flow does not dominate the score.
+    uu_a = uu - box_mean(uu, radius=2)
+    vv_a = vv - box_mean(vv, radius=2)
+    return (0.5 * (uu_a * uu_a + vv_a * vv_a)).astype(np.float32)
 
 
 def compute_vorticity(u: np.ndarray, v: np.ndarray) -> np.ndarray:
-    uu = _nan_to_num(u)
-    vv = _nan_to_num(v)
+    uu = box_mean(_nan_to_num(u), radius=1)
+    vv = box_mean(_nan_to_num(v), radius=1)
     du_dy, du_dx = np.gradient(uu)
     dv_dy, dv_dx = np.gradient(vv)
     return (dv_dx - du_dy).astype(np.float32)
 
 
 def compute_strain(u: np.ndarray, v: np.ndarray) -> np.ndarray:
-    uu = _nan_to_num(u)
-    vv = _nan_to_num(v)
+    uu = box_mean(_nan_to_num(u), radius=1)
+    vv = box_mean(_nan_to_num(v), radius=1)
     du_dy, du_dx = np.gradient(uu)
     dv_dy, dv_dx = np.gradient(vv)
     s1 = du_dx - dv_dy
