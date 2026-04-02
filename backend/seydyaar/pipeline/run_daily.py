@@ -477,17 +477,12 @@ def _postprocess_resampled(key: str, src: np.ndarray, arr: np.ndarray, target_h:
     out = np.asarray(arr, dtype=np.float32)
     src_h, src_w = src.shape
     up = max(float(target_h) / max(src_h, 1), float(target_w) / max(src_w, 1))
-    # Coarse daily/BGC fields need extra smoothing after interpolation, otherwise their native
-    # row/column quantization becomes very visible on fine AOIs.
-    if key in {"chl", "o2", "mld", "npp"}:
-        rad = max(1, min(2, int(round(up / 3.0))))
-        out = nan_gaussian_like(out, radius=rad, passes=1)
-    elif key in {"ssh", "sss", "currents_u", "currents_v", "currents_speed", "waves"}:
-        rad = max(1, min(2, int(round(up / 3.5))))
-        out = nan_gaussian_like(out, radius=rad, passes=1)
-    else:
-        if up > 2.2:
-            out = nan_gaussian_like(out, radius=1, passes=1)
+    # Preserve native detail unless we are strongly upsampling a very coarse field.
+    # Over-smoothing here visibly reduces sharpness and makes different runs look "muddier".
+    if key in {"chl", "o2", "mld", "npp"} and up >= 4.5:
+        out = nan_gaussian_like(out, radius=1, passes=1)
+    elif key in {"ssh", "sss", "currents_u", "currents_v", "currents_speed", "waves"} and up >= 5.0:
+        out = nan_gaussian_like(out, radius=1, passes=1)
     return out.astype(np.float32)
 
 
@@ -975,7 +970,7 @@ def run_daily(
         provider_status: List[Dict[str, Any]] = []
         front_base_q: Deque[np.ndarray] = deque(maxlen=max(front7_steps, front3_steps, 1))
 
-        QUALITY_FIX_VERSION = "2026-04-02-geo-aware-resample-v1"
+        QUALITY_FIX_VERSION = "sharpfix-v1-2026-04-02-geo-aware-resample-v1"
 
         for ts_iso in ts_list:
             tid = id_by_iso[ts_iso]
