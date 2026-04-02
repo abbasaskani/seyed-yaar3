@@ -108,8 +108,8 @@ def nan_gaussian_like(arr: np.ndarray, radius: int = 1, passes: int = 2) -> np.n
 
 def destripe_axis_banding(
     arr: np.ndarray,
-    strength: float = 0.10,
-    smooth_radius: int = 6,
+    strength: float = 0.20,
+    smooth_radius: int = 8,
     support_frac: float = 0.80,
 ) -> np.ndarray:
     """Conservative axis-banding suppression.
@@ -174,7 +174,8 @@ def gradient_magnitude(arr: np.ndarray) -> np.ndarray:
         return np.zeros_like(a, dtype=np.float32)
     fill = float(np.nanmedian(a[valid]))
     aa = _nan_to_num(a, fill=fill)
-    aa = nan_gaussian_like(aa, radius=1, passes=1)  # keep local denoise only
+    # keep gradients sharp; only the faintest denoise to suppress pixel noise
+    aa = nan_gaussian_like(aa, radius=1, passes=1) if float(np.nanstd(a[valid])) > 0.0 else aa
     gy, gx = np.gradient(aa.astype(np.float32))
     out = np.sqrt(gx * gx + gy * gy).astype(np.float32)
     out[~valid] = np.nan
@@ -195,7 +196,7 @@ def boa_front(arr: np.ndarray, denoise_radius: int = 1, background_radius: int =
     bg = nan_gaussian_like(sm, radius=max(background_radius, 2), passes=1)
     anom = sm - bg
     front = gradient_magnitude(anom)
-    front = front.astype(np.float32)
+    # do not blur the detected front itself; preserve local edge sharpness
     out = robust_normalize(front, lo_q=20.0, hi_q=95.0, min_span=5e-4)
     return out.astype(np.float32)
 
@@ -217,7 +218,7 @@ def fuse_fronts(
     weights: Dict[str, float] | None = None,
 ) -> np.ndarray:
     # SST is the cleanest signal at the current resolutions; CHL/SSH are retained but gently.
-    default_w = {"sst": 0.48, "chl": 0.16, "ssh": 0.18, "persist_3d": 0.14, "persist_7d": 0.04}
+    default_w = {"sst": 0.50, "chl": 0.18, "ssh": 0.18, "persist_3d": 0.10, "persist_7d": 0.04}
     w = dict(default_w)
     if weights:
         w.update(weights)
