@@ -108,8 +108,8 @@ def nan_gaussian_like(arr: np.ndarray, radius: int = 1, passes: int = 2) -> np.n
 
 def destripe_axis_banding(
     arr: np.ndarray,
-    strength: float = 0.20,
-    smooth_radius: int = 8,
+    strength: float = 0.10,
+    smooth_radius: int = 6,
     support_frac: float = 0.80,
 ) -> np.ndarray:
     """Conservative axis-banding suppression.
@@ -174,7 +174,7 @@ def gradient_magnitude(arr: np.ndarray) -> np.ndarray:
         return np.zeros_like(a, dtype=np.float32)
     fill = float(np.nanmedian(a[valid]))
     aa = _nan_to_num(a, fill=fill)
-    aa = nan_gaussian_like(aa, radius=1, passes=1)
+    aa = nan_gaussian_like(aa, radius=1, passes=1)  # keep local denoise only
     gy, gx = np.gradient(aa.astype(np.float32))
     out = np.sqrt(gx * gx + gy * gy).astype(np.float32)
     out[~valid] = np.nan
@@ -195,7 +195,7 @@ def boa_front(arr: np.ndarray, denoise_radius: int = 1, background_radius: int =
     bg = nan_gaussian_like(sm, radius=max(background_radius, 2), passes=1)
     anom = sm - bg
     front = gradient_magnitude(anom)
-    front = nan_gaussian_like(front, radius=1, passes=1)
+    front = front.astype(np.float32)
     out = robust_normalize(front, lo_q=20.0, hi_q=95.0, min_span=5e-4)
     return out.astype(np.float32)
 
@@ -205,7 +205,7 @@ def front_persistence(front_stack: Sequence[np.ndarray]) -> np.ndarray:
         raise ValueError("front_stack must not be empty")
     stack = np.stack([np.asarray(x, dtype=np.float32) for x in front_stack], axis=0)
     out = _safe_nanmean_stack(stack)
-    return nan_gaussian_like(out, radius=1, passes=1).astype(np.float32)
+    return out.astype(np.float32)
 
 
 def fuse_fronts(
@@ -236,28 +236,27 @@ def fuse_fronts(
         weight = max(float(w.get(key, 0.0)), 0.0)
         if weight <= 0.0:
             continue
-        clean = nan_gaussian_like(arr, radius=1, passes=1)
+        clean = np.asarray(arr, np.float32)
         out += weight * clean
         total += weight
     if total <= 0.0:
         return robust_normalize(front_boa_sst)
     out = out / total
-    out = nan_gaussian_like(out, radius=1, passes=1)
     return robust_normalize(out, lo_q=18.0, hi_q=96.0, min_span=5e-4)
 
 
 def compute_eke(u: np.ndarray, v: np.ndarray) -> np.ndarray:
-    uu = nan_gaussian_like(np.asarray(u, np.float32), radius=1, passes=2)
-    vv = nan_gaussian_like(np.asarray(v, np.float32), radius=1, passes=2)
-    uu_a = uu - nan_gaussian_like(uu, radius=2, passes=2)
-    vv_a = vv - nan_gaussian_like(vv, radius=2, passes=2)
+    uu = nan_gaussian_like(np.asarray(u, np.float32), radius=1, passes=1)
+    vv = nan_gaussian_like(np.asarray(v, np.float32), radius=1, passes=1)
+    uu_a = uu - nan_gaussian_like(uu, radius=2, passes=1)
+    vv_a = vv - nan_gaussian_like(vv, radius=2, passes=1)
     out = (0.5 * (uu_a * uu_a + vv_a * vv_a)).astype(np.float32)
     return out.astype(np.float32)
 
 
 def compute_vorticity(u: np.ndarray, v: np.ndarray) -> np.ndarray:
-    uu = nan_gaussian_like(_nan_to_num(u), radius=1, passes=2)
-    vv = nan_gaussian_like(_nan_to_num(v), radius=1, passes=2)
+    uu = nan_gaussian_like(_nan_to_num(u), radius=1, passes=1)
+    vv = nan_gaussian_like(_nan_to_num(v), radius=1, passes=1)
     du_dy, du_dx = np.gradient(uu)
     dv_dy, dv_dx = np.gradient(vv)
     out = (dv_dx - du_dy).astype(np.float32)
@@ -265,8 +264,8 @@ def compute_vorticity(u: np.ndarray, v: np.ndarray) -> np.ndarray:
 
 
 def compute_strain(u: np.ndarray, v: np.ndarray) -> np.ndarray:
-    uu = nan_gaussian_like(_nan_to_num(u), radius=1, passes=2)
-    vv = nan_gaussian_like(_nan_to_num(v), radius=1, passes=2)
+    uu = nan_gaussian_like(_nan_to_num(u), radius=1, passes=1)
+    vv = nan_gaussian_like(_nan_to_num(v), radius=1, passes=1)
     du_dy, du_dx = np.gradient(uu)
     dv_dy, dv_dx = np.gradient(vv)
     s1 = du_dx - dv_dy
