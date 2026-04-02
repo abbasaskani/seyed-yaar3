@@ -1,6 +1,9 @@
 {
   "skipjack": {
-    "label": {"en": "Skipjack tuna", "fa": "اسکیپ‌جک"},
+    "label": {
+      "en": "Skipjack tuna",
+      "fa": "اسکیپ‌جک"
+    },
     "scientific_name": "Katsuwonus pelamis",
     "region": "W Arabian Sea",
     "priors": {
@@ -13,23 +16,36 @@
       "waves_hs_soft_max_m": 1.5,
       "wind_soft_min_m_s": 5.0,
       "wind_soft_max_m_s": 12.0,
-      "front_weights": {"temp": 0.5, "chl": 0.25, "ssh": 0.25},
-      "front_fusion_weights": {"sst": 0.34, "chl": 0.28, "ssh": 0.18, "persist_3d": 0.12, "persist_7d": 0.08}
+      "front_weights": {
+        "temp": 0.5,
+        "chl": 0.25,
+        "ssh": 0.25
+      },
+      "front_fusion_weights": {
+        "sst": 0.42,
+        "chl": 0.24,
+        "ssh": 0.18,
+        "persist_3d": 0.1,
+        "persist_7d": 0.06
+      }
     },
     "layer_weights": {
-      "temp": 0.22,
-      "chl": 0.18,
-      "front": 0.23,
-      "current": 0.10,
+      "temp": 0.18,
+      "chl": 0.14,
+      "front": 0.18,
+      "current": 0.08,
       "eke": 0.05,
-      "okubo_weiss": 0.07,
-      "eddy_edge": 0.05,
+      "okubo_weiss": 0.05,
+      "eddy_edge": 0.04,
       "vertical": 0.06,
+      "mld": 0.05,
+      "o2": 0.05,
+      "sss": 0.03,
       "chl_3d": 0.03,
-      "chl_7d": 0.01,
+      "chl_7d": 0.02,
       "chl_anom": 0.0,
-      "npp_anom": 0.0,
-      "thermocline": 0.0
+      "npp_anom": 0.02,
+      "thermocline": 0.02
     },
     "ops_constraints": {
       "waves_hs_soft_max_m": 1.5,
@@ -37,10 +53,13 @@
       "wind_soft_min_m_s": 5.0,
       "wind_soft_max_m_s": 12.0
     },
-    "notes": "Lean defaults: core habitat/front/eddy/upper-ocean features are on; heavier blocks stay available in code but off by default."
+    "notes": "Precision-balanced defaults: sharper habitat fields, direct upper-ocean variables enabled for skipjack, fronts remain important but no longer dominate habitat texture."
   },
   "yellowfin": {
-    "label": {"en": "Yellowfin tuna", "fa": "یلّوفین"},
+    "label": {
+      "en": "Yellowfin tuna",
+      "fa": "یلّوفین"
+    },
     "scientific_name": "Thunnus albacares",
     "region": "W Arabian Sea",
     "priors": {
@@ -53,18 +72,31 @@
       "waves_hs_soft_max_m": 1.5,
       "wind_soft_min_m_s": 5.0,
       "wind_soft_max_m_s": 12.0,
-      "front_weights": {"temp": 0.5, "chl": 0.25, "ssh": 0.25},
-      "front_fusion_weights": {"sst": 0.32, "chl": 0.28, "ssh": 0.20, "persist_3d": 0.12, "persist_7d": 0.08}
+      "front_weights": {
+        "temp": 0.5,
+        "chl": 0.25,
+        "ssh": 0.25
+      },
+      "front_fusion_weights": {
+        "sst": 0.32,
+        "chl": 0.28,
+        "ssh": 0.2,
+        "persist_3d": 0.12,
+        "persist_7d": 0.08
+      }
     },
     "layer_weights": {
       "temp": 0.23,
       "chl": 0.16,
       "front": 0.23,
-      "current": 0.10,
+      "current": 0.1,
       "eke": 0.05,
       "okubo_weiss": 0.07,
       "eddy_edge": 0.05,
       "vertical": 0.06,
+      "mld": 0.0,
+      "o2": 0.0,
+      "sss": 0.0,
       "chl_3d": 0.03,
       "chl_7d": 0.01,
       "chl_anom": 0.0,
