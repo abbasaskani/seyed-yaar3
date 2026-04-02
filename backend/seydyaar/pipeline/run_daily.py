@@ -477,12 +477,17 @@ def _postprocess_resampled(key: str, src: np.ndarray, arr: np.ndarray, target_h:
     out = np.asarray(arr, dtype=np.float32)
     src_h, src_w = src.shape
     up = max(float(target_h) / max(src_h, 1), float(target_w) / max(src_w, 1))
-    # Preserve native detail unless we are strongly upsampling a very coarse field.
-    # Over-smoothing here visibly reduces sharpness and makes different runs look "muddier".
-    if key in {"chl", "o2", "mld", "npp"} and up >= 4.5:
-        out = nan_gaussian_like(out, radius=1, passes=1)
-    elif key in {"ssh", "sss", "currents_u", "currents_v", "currents_speed", "waves"} and up >= 5.0:
-        out = nan_gaussian_like(out, radius=1, passes=1)
+    # Preserve spatial detail. Only the coarsest fields get a *very* light post-resample denoise,
+    # and only when the upscale factor is extreme.
+    if key in {"chl", "o2", "mld", "npp"}:
+        if up >= 6.0:
+            out = nan_gaussian_like(out, radius=1, passes=1)
+    elif key in {"ssh", "sss", "currents_u", "currents_v", "currents_speed", "waves"}:
+        if up >= 7.0:
+            out = nan_gaussian_like(out, radius=1, passes=1)
+    else:
+        if up >= 8.0:
+            out = nan_gaussian_like(out, radius=1, passes=1)
     return out.astype(np.float32)
 
 
@@ -970,7 +975,7 @@ def run_daily(
         provider_status: List[Dict[str, Any]] = []
         front_base_q: Deque[np.ndarray] = deque(maxlen=max(front7_steps, front3_steps, 1))
 
-        QUALITY_FIX_VERSION = "sharpfix-v1-2026-04-02-geo-aware-resample-v1"
+        QUALITY_FIX_VERSION = "precision-balance-v1-2026-04-02-geo-aware-resample-v1"
 
         for ts_iso in ts_list:
             tid = id_by_iso[ts_iso]
@@ -1009,11 +1014,11 @@ def run_daily(
             ucur = layers["u_current_m_s"]
             vcur = layers["v_current_m_s"]
 
-            sst_front_src = nan_gaussian_like(sst, radius=1, passes=1)
-            chl_front_src = nan_gaussian_like(np.log10(np.clip(chl, 1e-6, None)), radius=2, passes=2)
-            ssh_front_src = nan_gaussian_like(ssh, radius=1, passes=1)
+            sst_front_src = np.asarray(sst, np.float32)
+            chl_front_src = np.log10(np.clip(chl, 1e-6, None)).astype(np.float32)
+            ssh_front_src = np.asarray(ssh, np.float32)
             front_sst = boa_front(sst_front_src, denoise_radius=1, background_radius=3)
-            front_logchl = boa_front(chl_front_src, denoise_radius=2, background_radius=5)
+            front_logchl = boa_front(chl_front_src, denoise_radius=1, background_radius=4)
             front_ssh = boa_front(ssh_front_src, denoise_radius=1, background_radius=3)
             base_front = fuse_fronts(front_sst, front_logchl, front_ssh, None, None, {
                 "sst": front_fusion_weights.get("sst", 0.34),
@@ -1069,11 +1074,14 @@ def run_daily(
                 chl_anom=chl_anom,
                 npp_anom=npp_anom,
                 thermocline_proxy=thermo,
+                mld_m=layers.get("mld_m"),
+                o2_mmol_m3=layers.get("o2_mmol_m3"),
+                sss_psu=layers.get("sss_psu"),
             )
             phab, _ = habitat_scoring(inputs, priors=priors, weights=weights)
             pops = ops_feasibility(cur, waves, ops_priors, gear_depth_m=10.0, wind_speed_m_s=ws)
             pcatch = np.clip(phab * pops, 0.0, 1.0).astype(np.float32)
-            front_mult = np.clip(0.985 + 0.05 * nan_gaussian_like(front_fused, radius=1, passes=1), 0.97, 1.04).astype(np.float32)
+            front_mult = np.clip(0.92 + 0.18 * np.power(np.clip(front_fused, 0.0, 1.0), 1.10), 0.90, 1.12).astype(np.float32)
             phab_frontplus = np.clip(phab * front_mult, 0.0, 1.0).astype(np.float32)
             frontplus = np.clip(phab_frontplus * pops, 0.0, 1.0).astype(np.float32)
             ens = _safe_nanmean_stack(np.stack([pcatch, frontplus], axis=0)).astype(np.float32)
