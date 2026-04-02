@@ -265,6 +265,146 @@ def _read_nc_vars(path: Path, variables: Sequence[str]) -> Dict[str, np.ndarray]
                 out[name] = arr.astype(np.float32)
         return out
 
+
+
+_LAT_NAMES = {"lat", "latitude", "nav_lat", "y"}
+_LON_NAMES = {"lon", "longitude", "nav_lon", "x"}
+
+
+def _extract_rectilinear_coords(ds: Dataset, var_name: str) -> tuple[np.ndarray | None, np.ndarray | None]:
+    var = ds.variables[var_name]
+    lat = lon = None
+    dim_names = [str(d).lower() for d in getattr(var, "dimensions", ())]
+    orig_dims = list(getattr(var, "dimensions", ()))
+    for dn, od in zip(dim_names, orig_dims):
+        if dn in _LAT_NAMES and od in ds.variables:
+            lat = np.asarray(ds.variables[od][:], dtype=np.float32).squeeze()
+        if dn in _LON_NAMES and od in ds.variables:
+            lon = np.asarray(ds.variables[od][:], dtype=np.float32).squeeze()
+    if lat is None:
+        for cand in ["latitude", "lat", "nav_lat"]:
+            if cand in ds.variables:
+                arr = np.asarray(ds.variables[cand][:], dtype=np.float32).squeeze()
+                lat = arr
+                break
+    if lon is None:
+        for cand in ["longitude", "lon", "nav_lon"]:
+            if cand in ds.variables:
+                arr = np.asarray(ds.variables[cand][:], dtype=np.float32).squeeze()
+                lon = arr
+                break
+    if lat is not None and lat.ndim == 2:
+        if np.allclose(lat, lat[:, [0]], equal_nan=True):
+            lat = lat[:, 0]
+        elif np.allclose(lat, lat[[0], :], equal_nan=True):
+            lat = lat[0, :]
+    if lon is not None and lon.ndim == 2:
+        if np.allclose(lon, lon[[0], :], equal_nan=True):
+            lon = lon[0, :]
+        elif np.allclose(lon, lon[:, [0]], equal_nan=True):
+            lon = lon[:, 0]
+    if lat is None or lon is None:
+        return None, None
+    lat = np.asarray(lat, dtype=np.float32).squeeze()
+    lon = np.asarray(lon, dtype=np.float32).squeeze()
+    if lat.ndim != 1 or lon.ndim != 1:
+        return None, None
+    return lat.astype(np.float32), lon.astype(np.float32)
+
+
+def _read_nc_var_with_coords(path: Path, var_name: str) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
+    if Dataset is None:
+        arr = _read_nc_vars(path, [var_name])[var_name]
+        return arr, None, None
+    with Dataset(path.as_posix(), mode="r") as ds:  # type: ignore[misc]
+        if var_name not in ds.variables:
+            raise KeyError(f"Variable '{var_name}' not found in {path.name}")
+        v = ds.variables[var_name]
+        arr = _squeeze_to_2d(v[...])
+        fill = getattr(v, "_FillValue", None)
+        if fill is None:
+            fill = getattr(v, "missing_value", None)
+        if fill is not None:
+            try:
+                arr[arr == np.float32(fill)] = np.nan
+            except Exception:
+                pass
+        arr[~np.isfinite(arr)] = np.nan
+        arr[np.abs(arr) > np.float32(1e6)] = np.nan
+        lat, lon = _extract_rectilinear_coords(ds, var_name)
+    return arr.astype(np.float32), lat, lon
+
+
+def _safe_nanmean_stack(stack: np.ndarray) -> np.ndarray:
+    arr = np.asarray(stack, dtype=np.float32)
+    valid = np.isfinite(arr)
+    count = valid.sum(axis=0).astype(np.float32)
+    num = np.where(valid, arr, 0.0).sum(axis=0, dtype=np.float32)
+    out = np.divide(num, np.maximum(count, 1.0), dtype=np.float32)
+    out[count <= 0.0] = np.nan
+    return out.astype(np.float32)
+
+
+def _interp_rectilinear_nan(
+    src: np.ndarray, lat: np.ndarray, lon: np.ndarray, target_lats: np.ndarray, target_lons: np.ndarray
+) -> np.ndarray:
+    src = np.asarray(src, dtype=np.float32)
+    lat = np.asarray(lat, dtype=np.float32).copy()
+    lon = np.asarray(lon, dtype=np.float32).copy()
+    if src.ndim != 2 or lat.ndim != 1 or lon.ndim != 1:
+        return _resize_bilinear_nan(src, len(target_lats), len(target_lons))
+    if src.shape != (lat.size, lon.size):
+        # try transpose if coordinates correspond to swapped axes
+        if src.T.shape == (lat.size, lon.size):
+            src = src.T
+        else:
+            return _resize_bilinear_nan(src, len(target_lats), len(target_lons))
+    if lat.size < 2 or lon.size < 2:
+        return _resize_bilinear_nan(src, len(target_lats), len(target_lons))
+    if lat[0] > lat[-1]:
+        lat = lat[::-1]
+        src = src[::-1, :]
+    if lon[0] > lon[-1]:
+        lon = lon[::-1]
+        src = src[:, ::-1]
+
+    ty = np.clip(np.asarray(target_lats, dtype=np.float32), float(lat[0]), float(lat[-1]))
+    tx = np.clip(np.asarray(target_lons, dtype=np.float32), float(lon[0]), float(lon[-1]))
+    y1 = np.searchsorted(lat, ty, side="left")
+    x1 = np.searchsorted(lon, tx, side="left")
+    y1 = np.clip(y1, 1, len(lat)-1)
+    x1 = np.clip(x1, 1, len(lon)-1)
+    y0 = y1 - 1
+    x0 = x1 - 1
+    ly0 = lat[y0]
+    ly1 = lat[y1]
+    lx0 = lon[x0]
+    lx1 = lon[x1]
+    wy = ((ty - ly0) / np.maximum(ly1 - ly0, 1e-12)).astype(np.float32)[:, None]
+    wx = ((tx - lx0) / np.maximum(lx1 - lx0, 1e-12)).astype(np.float32)[None, :]
+
+    valid = np.isfinite(src)
+    vals = np.where(valid, src, 0.0).astype(np.float32)
+    wts = valid.astype(np.float32)
+
+    i00 = vals[y0[:, None], x0[None, :]]
+    i01 = vals[y0[:, None], x1[None, :]]
+    i10 = vals[y1[:, None], x0[None, :]]
+    i11 = vals[y1[:, None], x1[None, :]]
+    w00 = wts[y0[:, None], x0[None, :]]
+    w01 = wts[y0[:, None], x1[None, :]]
+    w10 = wts[y1[:, None], x0[None, :]]
+    w11 = wts[y1[:, None], x1[None, :]]
+
+    a00 = (1.0 - wy) * (1.0 - wx)
+    a01 = (1.0 - wy) * wx
+    a10 = wy * (1.0 - wx)
+    a11 = wy * wx
+
+    num = i00 * a00 * w00 + i01 * a01 * w01 + i10 * a10 * w10 + i11 * a11 * w11
+    den = a00 * w00 + a01 * w01 + a10 * w10 + a11 * w11
+    out = np.divide(num, den, out=np.full((len(target_lats), len(target_lons)), np.nan, dtype=np.float32), where=den > 1e-6)
+    return out.astype(np.float32)
     import rasterio
     for name in variables:
         with rasterio.open(f'NETCDF:"{path}":{name}') as ds:
@@ -340,13 +480,13 @@ def _postprocess_resampled(key: str, src: np.ndarray, arr: np.ndarray, target_h:
     # Coarse daily/BGC fields need extra smoothing after interpolation, otherwise their native
     # row/column quantization becomes very visible on fine AOIs.
     if key in {"chl", "o2", "mld", "npp"}:
-        rad = max(1, min(5, int(round(up / 1.8))))
-        out = nan_gaussian_like(out, radius=rad, passes=2)
-    elif key in {"ssh", "sss", "currents_u", "currents_v", "currents_speed"}:
-        rad = max(1, min(4, int(round(up / 2.4))))
-        out = nan_gaussian_like(out, radius=rad, passes=2)
+        rad = max(1, min(2, int(round(up / 3.0))))
+        out = nan_gaussian_like(out, radius=rad, passes=1)
+    elif key in {"ssh", "sss", "currents_u", "currents_v", "currents_speed", "waves"}:
+        rad = max(1, min(2, int(round(up / 3.5))))
+        out = nan_gaussian_like(out, radius=rad, passes=1)
     else:
-        if up > 1.5:
+        if up > 2.2:
             out = nan_gaussian_like(out, radius=1, passes=1)
     return out.astype(np.float32)
 
@@ -514,36 +654,43 @@ def _try_copernicus_layers(
                 continue
         raise RuntimeError(f"{key}: subset failed for {t0.isoformat()} (tried dataset-cadence offsets). Last error: {last_err}")
 
-    def _to_grid(key: str, a: np.ndarray) -> np.ndarray:
-        resized = _resize_bilinear_nan(a, grid.height, grid.width)
+    target_lats = np.linspace(float(grid.lat_max), float(grid.lat_min), int(grid.height), dtype=np.float32)
+    target_lons = np.linspace(float(grid.lon_min), float(grid.lon_max), int(grid.width), dtype=np.float32)
+
+    def _to_grid(key: str, a: np.ndarray, lat: np.ndarray | None = None, lon: np.ndarray | None = None) -> np.ndarray:
+        if lat is not None and lon is not None:
+            resized = _interp_rectilinear_nan(a, lat, lon, target_lats, target_lons)
+        else:
+            resized = _resize_bilinear_nan(a, grid.height, grid.width)
         return _postprocess_resampled(key, a, resized, grid.height, grid.width)
 
     out: Dict[str, np.ndarray] = {}
     try:
         p_sst = _subset_one("sst")
-        src_sst = _read_nc_vars(p_sst, _vnames("sst"))[_vnames("sst")[0]]
-        out["sst_c"] = _to_grid("sst", src_sst)
+        src_sst, lat_sst, lon_sst = _read_nc_var_with_coords(p_sst, _vnames("sst")[0])
+        out["sst_c"] = _to_grid("sst", src_sst, lat_sst, lon_sst)
 
         p_chl = _subset_one("chl")
-        src_chl = _read_nc_vars(p_chl, _vnames("chl"))[_vnames("chl")[0]]
-        out["chl_mg_m3"] = _to_grid("chl", src_chl)
+        src_chl, lat_chl, lon_chl = _read_nc_var_with_coords(p_chl, _vnames("chl")[0])
+        out["chl_mg_m3"] = _to_grid("chl", src_chl, lat_chl, lon_chl)
 
         p_ssh = _subset_one("ssh")
-        src_ssh = _read_nc_vars(p_ssh, _vnames("ssh"))[_vnames("ssh")[0]]
-        out["ssh_m"] = _to_grid("ssh", src_ssh)
+        src_ssh, lat_ssh, lon_ssh = _read_nc_var_with_coords(p_ssh, _vnames("ssh")[0])
+        out["ssh_m"] = _to_grid("ssh", src_ssh, lat_ssh, lon_ssh)
 
         p_cur = _subset_one("currents")
         cur_names = _vnames("currents")
-        vv = _read_nc_vars(p_cur, cur_names[:2])
-        u = _to_grid("currents_u", vv[cur_names[0]])
-        v = _to_grid("currents_v", vv[cur_names[1]])
+        src_u, lat_cur, lon_cur = _read_nc_var_with_coords(p_cur, cur_names[0])
+        src_v, _, _ = _read_nc_var_with_coords(p_cur, cur_names[1])
+        u = _to_grid("currents_u", src_u, lat_cur, lon_cur)
+        v = _to_grid("currents_v", src_v, lat_cur, lon_cur)
         out["u_current_m_s"] = u.astype(np.float32)
         out["v_current_m_s"] = v.astype(np.float32)
         out["current_m_s"] = _postprocess_resampled("currents_speed", u, np.sqrt(u.astype(np.float64) ** 2 + v.astype(np.float64) ** 2).astype(np.float32), grid.height, grid.width)
 
         p_waves = _subset_one("waves")
-        src_waves = _read_nc_vars(p_waves, _vnames("waves"))[_vnames("waves")[0]]
-        out["waves_hs_m"] = _to_grid("waves", src_waves)
+        src_waves, lat_wav, lon_wav = _read_nc_var_with_coords(p_waves, _vnames("waves")[0])
+        out["waves_hs_m"] = _to_grid("waves", src_waves, lat_wav, lon_wav)
 
         if flags.enable_vertical:
             for key, out_key in (("sss", "sss_psu"), ("mld", "mld_m"), ("o2", "o2_mmol_m3")):
@@ -553,8 +700,8 @@ def _try_copernicus_layers(
                 try:
                     p_opt = _subset_one(key)
                     var_name = _vnames(key)[0]
-                    src_opt = _read_nc_vars(p_opt, [var_name])[var_name]
-                    out[out_key] = _to_grid(key, src_opt)
+                    src_opt, lat_opt, lon_opt = _read_nc_var_with_coords(p_opt, var_name)
+                    out[out_key] = _to_grid(key, src_opt, lat_opt, lon_opt)
                 except Exception as ee:
                     status["warnings"].append(f"{key} optional layer skipped: {ee}")
 
@@ -564,8 +711,8 @@ def _try_copernicus_layers(
                 try:
                     p_npp = _subset_one("npp")
                     var_name = _vnames("npp")[0]
-                    src_npp = _read_nc_vars(p_npp, [var_name])[var_name]
-                    out["npp_mgC_m3_d"] = _to_grid("npp", src_npp)
+                    src_npp, lat_npp, lon_npp = _read_nc_var_with_coords(p_npp, var_name)
+                    out["npp_mgC_m3_d"] = _to_grid("npp", src_npp, lat_npp, lon_npp)
                 except Exception as ee:
                     status["warnings"].append(f"npp optional layer skipped: {ee}")
 
@@ -828,7 +975,7 @@ def run_daily(
         provider_status: List[Dict[str, Any]] = []
         front_base_q: Deque[np.ndarray] = deque(maxlen=max(front7_steps, front3_steps, 1))
 
-        QUALITY_FIX_VERSION = "2026-04-01-output-quality-v4-local-nan-resize"
+        QUALITY_FIX_VERSION = "2026-04-02-geo-aware-resample-v1"
 
         for ts_iso in ts_list:
             tid = id_by_iso[ts_iso]
@@ -934,7 +1081,7 @@ def run_daily(
             front_mult = np.clip(0.985 + 0.05 * nan_gaussian_like(front_fused, radius=1, passes=1), 0.97, 1.04).astype(np.float32)
             phab_frontplus = np.clip(phab * front_mult, 0.0, 1.0).astype(np.float32)
             frontplus = np.clip(phab_frontplus * pops, 0.0, 1.0).astype(np.float32)
-            ens = np.nanmean(np.stack([pcatch, frontplus], axis=0), axis=0).astype(np.float32)
+            ens = _safe_nanmean_stack(np.stack([pcatch, frontplus], axis=0)).astype(np.float32)
             agree, spread = ensemble_stats([pcatch, frontplus])
 
             tdir.mkdir(parents=True, exist_ok=True)
