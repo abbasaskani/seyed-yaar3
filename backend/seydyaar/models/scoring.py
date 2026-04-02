@@ -9,6 +9,9 @@ from .ocean_features import (
     gradient_magnitude,
     nan_gaussian_like,
     robust_normalize,
+    score_mld,
+    score_o2,
+    score_sss,
 )
 
 
@@ -67,6 +70,9 @@ class HabitatInputs:
     chl_anom: np.ndarray | None = None
     npp_anom: np.ndarray | None = None
     thermocline_proxy: np.ndarray | None = None
+    mld_m: np.ndarray | None = None
+    o2_mmol_m3: np.ndarray | None = None
+    sss_psu: np.ndarray | None = None
 
 
 def habitat_scoring(inputs: HabitatInputs, priors: Dict, weights: Dict) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
@@ -103,6 +109,9 @@ def habitat_scoring(inputs: HabitatInputs, priors: Dict, weights: Dict) -> Tuple
     s_okubo = _clean_prob_field(robust_normalize(-np.asarray(inputs.okubo_weiss, dtype=np.float32), lo_q=10.0, hi_q=90.0, min_span=5e-4), smooth_radius=0, stripe_strength=0.0) if (inputs.okubo_weiss is not None and w.get("okubo_weiss", 0.0) > 0.0) else zero
     s_eddy_edge = _clean_prob_field((1.0 - np.asarray(inputs.eddy_edge_distance, dtype=np.float32)), smooth_radius=0, stripe_strength=0.0) if (inputs.eddy_edge_distance is not None and w.get("eddy_edge", 0.0) > 0.0) else zero
     s_vertical = _clean_prob_field(np.asarray(inputs.vertical_access, dtype=np.float32), smooth_radius=0, stripe_strength=0.0) if (inputs.vertical_access is not None and w.get("vertical", 0.0) > 0.0) else zero
+    s_mld = _clean_prob_field(score_mld(inputs.mld_m), smooth_radius=0, stripe_strength=0.0) if (inputs.mld_m is not None and w.get("mld", 0.0) > 0.0) else zero
+    s_o2 = _clean_prob_field(score_o2(inputs.o2_mmol_m3), smooth_radius=0, stripe_strength=0.0) if (inputs.o2_mmol_m3 is not None and w.get("o2", 0.0) > 0.0) else zero
+    s_sss = _clean_prob_field(score_sss(inputs.sss_psu), smooth_radius=0, stripe_strength=0.0) if (inputs.sss_psu is not None and w.get("sss", 0.0) > 0.0) else zero
     s_chl_3d = _clean_prob_field(score_chl_mg_m3(inputs.chl_3d_mean, priors["chl_opt_mg_m3"], priors["chl_sigma_log10"]), smooth_radius=0, stripe_strength=0.0) if (inputs.chl_3d_mean is not None and w.get("chl_3d", 0.0) > 0.0) else zero
     s_chl_7d = _clean_prob_field(score_chl_mg_m3(inputs.chl_7d_mean, priors["chl_opt_mg_m3"], priors["chl_sigma_log10"]), smooth_radius=0, stripe_strength=0.0) if (inputs.chl_7d_mean is not None and w.get("chl_7d", 0.0) > 0.0) else zero
     s_chl_anom = _clean_prob_field(np.asarray(inputs.chl_anom, dtype=np.float32), smooth_radius=0, stripe_strength=0.0) if (inputs.chl_anom is not None and w.get("chl_anom", 0.0) > 0.0) else zero
@@ -115,6 +124,9 @@ def habitat_scoring(inputs: HabitatInputs, priors: Dict, weights: Dict) -> Tuple
         w.get("chl", 0.0) * s_chl +
         w.get("current", 0.0) * s_cur +
         w.get("vertical", 0.0) * s_vertical +
+        w.get("mld", 0.0) * s_mld +
+        w.get("o2", 0.0) * s_o2 +
+        w.get("sss", 0.0) * s_sss +
         w.get("chl_3d", 0.0) * s_chl_3d +
         w.get("chl_7d", 0.0) * s_chl_7d +
         w.get("thermocline", 0.0) * s_thermocline
@@ -141,6 +153,9 @@ def habitat_scoring(inputs: HabitatInputs, priors: Dict, weights: Dict) -> Tuple
         "score_okubo_weiss": s_okubo,
         "score_eddy_edge": s_eddy_edge,
         "score_vertical": s_vertical,
+        "score_mld": s_mld,
+        "score_o2": s_o2,
+        "score_sss": s_sss,
         "score_chl_3d": s_chl_3d,
         "score_chl_7d": s_chl_7d,
         "score_chl_anom": s_chl_anom,
