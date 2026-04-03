@@ -36,6 +36,7 @@ from ..models.ocean_features import (
     boa_front,
     box_mean,
     destripe_axis_banding,
+    fill_missing_local,
     nan_gaussian_like,
     compute_eddy_edge_distance,
     compute_eke,
@@ -51,7 +52,7 @@ from ..models.ocean_features import (
     wind_speed_dir,
 )
 from ..models.ops import ops_feasibility
-from ..models.scoring import HabitatInputs, habitat_scoring
+from ..models.scoring import HabitatInputs, habitat_scoring, score_mld, score_o2, score_sss
 from ..utils_geo import GridSpec, bbox_from_geojson, mask_from_geojson
 from ..utils_time import time_id_from_iso, timestamps_for_range, trusted_utc_now
 from .io import minify_json_for_web, write_bin_f32, write_bin_u8, write_json
@@ -473,21 +474,25 @@ def _resize_bilinear_nan(a: np.ndarray, target_h: int, target_w: int) -> np.ndar
     return out.astype(np.float32)
 
 
-def _postprocess_resampled(key: str, src: np.ndarray, arr: np.ndarray, target_h: int, target_w: int) -> np.ndarray:
+def _postprocess_resampled(key: str, src: np.ndarray, arr: np.ndarray, target_h: int, target_w: int, profile: str = "native") -> np.ndarray:
+    """Profile-aware postprocess after interpolation.
+
+    native: no blanket smoothing; only local NaN filling if missing values remain.
+    light: extremely mild denoise for coarse BGC/physics layers after exact regridding.
+    """
     out = np.asarray(arr, dtype=np.float32)
+    if np.any(~np.isfinite(out)):
+        out = fill_missing_local(out, radius=1, passes=1)
+    if str(profile) == "native":
+        return out.astype(np.float32)
     src_h, src_w = src.shape
     up = max(float(target_h) / max(src_h, 1), float(target_w) / max(src_w, 1))
-    # Preserve spatial detail. Only the coarsest fields get a *very* light post-resample denoise,
-    # and only when the upscale factor is extreme.
-    if key in {"chl", "o2", "mld", "npp"}:
-        if up >= 6.0:
-            out = nan_gaussian_like(out, radius=1, passes=1)
-    elif key in {"ssh", "sss", "currents_u", "currents_v", "currents_speed", "waves"}:
-        if up >= 7.0:
-            out = nan_gaussian_like(out, radius=1, passes=1)
-    else:
-        if up >= 8.0:
-            out = nan_gaussian_like(out, radius=1, passes=1)
+    if key in {"chl", "o2", "mld", "npp"} and up >= 6.0:
+        out = nan_gaussian_like(out, radius=1, passes=1)
+    elif key in {"ssh", "sss", "currents_u", "currents_v", "currents_speed"} and up >= 7.0:
+        out = nan_gaussian_like(out, radius=1, passes=1)
+    elif key in {"waves", "wind_u", "wind_v"} and up >= 8.0:
+        out = nan_gaussian_like(out, radius=1, passes=1)
     return out.astype(np.float32)
 
 
@@ -499,8 +504,8 @@ def _load_local_era5_wind(grid: GridSpec, ts_iso: str, template: str, variables:
     try:
         names = list(variables)[:2] if len(list(variables)) >= 2 else ["u10", "v10"]
         vv = _read_nc_vars(path, names)
-        u = _postprocess_resampled("wind_u", vv[names[0]], _resize_bilinear_nan(vv[names[0]], grid.height, grid.width), grid.height, grid.width)
-        v = _postprocess_resampled("wind_v", vv[names[1]], _resize_bilinear_nan(vv[names[1]], grid.height, grid.width), grid.height, grid.width)
+        u = _postprocess_resampled("wind_u", vv[names[0]], _resize_bilinear_nan(vv[names[0]], grid.height, grid.width), grid.height, grid.width, profile="native")
+        v = _postprocess_resampled("wind_v", vv[names[1]], _resize_bilinear_nan(vv[names[1]], grid.height, grid.width), grid.height, grid.width, profile="native")
         return {
             "wind_u10_m_s": u.astype(np.float32),
             "wind_v10_m_s": v.astype(np.float32),
@@ -662,7 +667,7 @@ def _try_copernicus_layers(
             resized = _interp_rectilinear_nan(a, lat, lon, target_lats, target_lons)
         else:
             resized = _resize_bilinear_nan(a, grid.height, grid.width)
-        return _postprocess_resampled(key, a, resized, grid.height, grid.width)
+        return _postprocess_resampled(key, a, resized, grid.height, grid.width, profile="native")
 
     out: Dict[str, np.ndarray] = {}
     try:
@@ -686,7 +691,7 @@ def _try_copernicus_layers(
         v = _to_grid("currents_v", src_v, lat_cur, lon_cur)
         out["u_current_m_s"] = u.astype(np.float32)
         out["v_current_m_s"] = v.astype(np.float32)
-        out["current_m_s"] = _postprocess_resampled("currents_speed", u, np.sqrt(u.astype(np.float64) ** 2 + v.astype(np.float64) ** 2).astype(np.float32), grid.height, grid.width)
+        out["current_m_s"] = _postprocess_resampled("currents_speed", u, np.sqrt(u.astype(np.float64) ** 2 + v.astype(np.float64) ** 2).astype(np.float32), grid.height, grid.width, profile="native")
 
         p_waves = _subset_one("waves")
         src_waves, lat_wav, lon_wav = _read_nc_var_with_coords(p_waves, _vnames("waves")[0])
@@ -738,6 +743,33 @@ def _try_copernicus_layers(
     except Exception as e:
         status["errors"].append(str(e))
         return None, status
+
+
+def _profile_array(arr: np.ndarray, key: str, profile: str) -> np.ndarray:
+    a = np.asarray(arr, dtype=np.float32)
+    if np.any(~np.isfinite(a)):
+        a = fill_missing_local(a, radius=1, passes=1)
+    if profile == "native":
+        return a.astype(np.float32)
+    if key in {"chl_mg_m3", "mld_m", "o2_mmol_m3", "sss_psu", "npp_mgC_m3_d"}:
+        return nan_gaussian_like(a, radius=1, passes=1).astype(np.float32)
+    if key in {"ssh_m", "u_current_m_s", "v_current_m_s"}:
+        return nan_gaussian_like(a, radius=1, passes=1).astype(np.float32)
+    return a.astype(np.float32)
+
+
+def _profile_layers(layers: Dict[str, np.ndarray], profile: str) -> Dict[str, np.ndarray]:
+    out: Dict[str, np.ndarray] = {}
+    for key, val in layers.items():
+        if isinstance(val, np.ndarray) and val.ndim == 2 and np.issubdtype(val.dtype, np.floating):
+            out[key] = _profile_array(val, key, profile)
+        else:
+            out[key] = val
+    if "u_current_m_s" in out and "v_current_m_s" in out:
+        u = np.asarray(out["u_current_m_s"], np.float32)
+        v = np.asarray(out["v_current_m_s"], np.float32)
+        out["current_m_s"] = np.sqrt(u.astype(np.float64)**2 + v.astype(np.float64)**2).astype(np.float32)
+    return out
 
 
 def _write_meta_index(out_root: Path, run_entry: Dict[str, Any]) -> None:
@@ -946,15 +978,27 @@ def run_daily(
             "paths": {
                 "mask": f"variants/{variant}/species/{sp}/mask_u8.bin",
                 "per_time": {
-                    "pcatch_scoring": f"variants/{variant}/species/{sp}/times/{{time}}/pcatch_scoring_f32.bin",
-                    "pcatch_frontplus": f"variants/{variant}/species/{sp}/times/{{time}}/pcatch_frontplus_f32.bin",
-                    "pcatch_ensemble": f"variants/{variant}/species/{sp}/times/{{time}}/pcatch_ensemble_f32.bin",
-                    "phab_scoring": f"variants/{variant}/species/{sp}/times/{{time}}/phab_f32.bin",
-                    "phab_frontplus": f"variants/{variant}/species/{sp}/times/{{time}}/phab_frontplus_f32.bin",
+                    "pcatch_scoring": f"variants/{variant}/species/{sp}/times/{{time}}/pcatch_scoring_light_f32.bin",
+                    "pcatch_frontplus": f"variants/{variant}/species/{sp}/times/{{time}}/pcatch_frontplus_light_f32.bin",
+                    "pcatch_ensemble": f"variants/{variant}/species/{sp}/times/{{time}}/pcatch_ensemble_light_f32.bin",
+                    "phab_scoring": f"variants/{variant}/species/{sp}/times/{{time}}/phab_scoring_light_f32.bin",
+                    "phab_frontplus": f"variants/{variant}/species/{sp}/times/{{time}}/phab_frontplus_light_f32.bin",
+                    "front": f"variants/{variant}/species/{sp}/times/{{time}}/front_light_f32.bin",
+                    "pcatch_scoring_native": f"variants/{variant}/species/{sp}/times/{{time}}/pcatch_scoring_native_f32.bin",
+                    "pcatch_frontplus_native": f"variants/{variant}/species/{sp}/times/{{time}}/pcatch_frontplus_native_f32.bin",
+                    "pcatch_ensemble_native": f"variants/{variant}/species/{sp}/times/{{time}}/pcatch_ensemble_native_f32.bin",
+                    "pcatch_scoring_light": f"variants/{variant}/species/{sp}/times/{{time}}/pcatch_scoring_light_f32.bin",
+                    "pcatch_frontplus_light": f"variants/{variant}/species/{sp}/times/{{time}}/pcatch_frontplus_light_f32.bin",
+                    "pcatch_ensemble_light": f"variants/{variant}/species/{sp}/times/{{time}}/pcatch_ensemble_light_f32.bin",
+                    "phab_scoring_native": f"variants/{variant}/species/{sp}/times/{{time}}/phab_scoring_native_f32.bin",
+                    "phab_frontplus_native": f"variants/{variant}/species/{sp}/times/{{time}}/phab_frontplus_native_f32.bin",
+                    "front_native": f"variants/{variant}/species/{sp}/times/{{time}}/front_native_f32.bin",
+                    "phab_scoring_light": f"variants/{variant}/species/{sp}/times/{{time}}/phab_scoring_light_f32.bin",
+                    "phab_frontplus_light": f"variants/{variant}/species/{sp}/times/{{time}}/phab_frontplus_light_f32.bin",
+                    "front_light": f"variants/{variant}/species/{sp}/times/{{time}}/front_light_f32.bin",
                     "pops": f"variants/{variant}/species/{sp}/times/{{time}}/pops_f32.bin",
                     "agree": f"variants/{variant}/species/{sp}/times/{{time}}/agree_f32.bin",
                     "spread": f"variants/{variant}/species/{sp}/times/{{time}}/spread_f32.bin",
-                    "front": f"variants/{variant}/species/{sp}/times/{{time}}/front_f32.bin",
                     "sst": f"variants/{variant}/species/{sp}/times/{{time}}/sst_f32.bin",
                     "chl": f"variants/{variant}/species/{sp}/times/{{time}}/chl_f32.bin",
                     "current": f"variants/{variant}/species/{sp}/times/{{time}}/current_f32.bin",
@@ -973,18 +1017,21 @@ def run_daily(
         minify_json_for_web(sp_root / "meta.json")
 
         provider_status: List[Dict[str, Any]] = []
-        front_base_q: Deque[np.ndarray] = deque(maxlen=max(front7_steps, front3_steps, 1))
+        front_base_qs: Dict[str, Deque[np.ndarray]] = {"native": deque(maxlen=max(front7_steps, front3_steps, 1)), "light": deque(maxlen=max(front7_steps, front3_steps, 1))}
 
-        QUALITY_FIX_VERSION = "precision-balance-v1-2026-04-02-geo-aware-resample-v1"
+        QUALITY_FIX_VERSION = "2026-04-03-dual-profile-evidence-priors-v1"
 
         for ts_iso in ts_list:
             tid = id_by_iso[ts_iso]
             tdir = times_root / tid
             version_marker = tdir / "_quality_version.json"
             required_outputs = [
-                tdir / "phab_f32.bin",
-                tdir / "phab_frontplus_f32.bin",
-                tdir / "front_f32.bin",
+                tdir / "phab_scoring_native_f32.bin",
+                tdir / "phab_scoring_light_f32.bin",
+                tdir / "phab_frontplus_native_f32.bin",
+                tdir / "phab_frontplus_light_f32.bin",
+                tdir / "front_native_f32.bin",
+                tdir / "front_light_f32.bin",
                 tdir / "conf_f32.bin",
                 tdir / "qc_chl_u8.bin",
             ]
@@ -1006,104 +1053,145 @@ def run_daily(
             status = provider_status_by_tid[tid]
             provider_status.append({"timestamp": ts_iso, **status})
 
-            sst = layers["sst_c"]
-            chl = layers["chl_mg_m3"]
-            ssh = layers["ssh_m"]
-            cur = layers["current_m_s"]
-            waves = layers["waves_hs_m"]
-            ucur = layers["u_current_m_s"]
-            vcur = layers["v_current_m_s"]
+            profile_cfgs = {
+                "native": {"front_denoise_sst": 0, "front_denoise_chl": 0, "front_denoise_ssh": 0, "uv_smooth": 0, "thermo_smooth": 0, "frontplus_gain": 0.14},
+                "light": {"front_denoise_sst": 1, "front_denoise_chl": 1, "front_denoise_ssh": 1, "uv_smooth": 1, "thermo_smooth": 1, "frontplus_gain": 0.12},
+            }
+            profile_outputs: Dict[str, Dict[str, np.ndarray]] = {}
 
-            sst_front_src = np.asarray(sst, np.float32)
-            chl_front_src = np.log10(np.clip(chl, 1e-6, None)).astype(np.float32)
-            ssh_front_src = np.asarray(ssh, np.float32)
-            front_sst = boa_front(sst_front_src, denoise_radius=1, background_radius=3)
-            front_logchl = boa_front(chl_front_src, denoise_radius=1, background_radius=4)
-            front_ssh = boa_front(ssh_front_src, denoise_radius=1, background_radius=3)
-            base_front = fuse_fronts(front_sst, front_logchl, front_ssh, None, None, {
-                "sst": front_fusion_weights.get("sst", 0.34),
-                "chl": front_fusion_weights.get("chl", 0.28),
-                "ssh": front_fusion_weights.get("ssh", 0.18),
-            })
-            front_base_q.append(base_front)
-            persist3 = front_persistence(list(front_base_q)[-front3_steps:]) if flags.front_persist_3d else None
-            persist7 = front_persistence(list(front_base_q)[-front7_steps:]) if flags.front_persist_7d else None
-            front_fused = fuse_fronts(front_sst, front_logchl, front_ssh, persist3, persist7, front_fusion_weights)
+            for profile_name, cfgp in profile_cfgs.items():
+                prof_layers = _profile_layers(layers, profile_name)
+                sst = prof_layers["sst_c"]
+                chl = prof_layers["chl_mg_m3"]
+                ssh = prof_layers["ssh_m"]
+                cur = prof_layers["current_m_s"]
+                waves = prof_layers["waves_hs_m"]
+                ucur = prof_layers["u_current_m_s"]
+                vcur = prof_layers["v_current_m_s"]
 
-            if flags.enable_vertical and all(k in layers for k in ("mld_m", "o2_mmol_m3", "sss_psu")):
-                vert, _ = vertical_access(layers["mld_m"], layers["o2_mmol_m3"], layers["sss_psu"])
-                thermo = thermocline_proxy(layers["mld_m"])
-            else:
-                vert = None
-                thermo = None
+                front_sst = boa_front(sst, denoise_radius=cfgp["front_denoise_sst"], background_radius=3)
+                front_logchl = boa_front(np.log10(np.clip(chl, 1e-6, None)), denoise_radius=cfgp["front_denoise_chl"], background_radius=4)
+                front_ssh = boa_front(ssh, denoise_radius=cfgp["front_denoise_ssh"], background_radius=3)
+                base_front = fuse_fronts(front_sst, front_logchl, front_ssh, None, None, {
+                    "sst": front_fusion_weights.get("sst", 0.36),
+                    "chl": front_fusion_weights.get("chl", 0.38),
+                    "ssh": front_fusion_weights.get("ssh", 0.18),
+                })
+                front_base_qs[profile_name].append(base_front)
+                persist3 = front_persistence(list(front_base_qs[profile_name])[-front3_steps:]) if flags.front_persist_3d else None
+                persist7 = front_persistence(list(front_base_qs[profile_name])[-front7_steps:]) if flags.front_persist_7d else None
+                front_fused = fuse_fronts(front_sst, front_logchl, front_ssh, persist3, persist7, front_fusion_weights)
 
-            chl_3d = rolling_mean(layers_by_tid, time_ids, tid, "chl_mg_m3", chl3_steps)
-            chl_7d = rolling_mean(layers_by_tid, time_ids, tid, "chl_mg_m3", chl7_steps) if flags.enable_chl_7d else None
-            chl_anom = anomaly(chl, chl_7d) if (flags.enable_chl_anom and chl_7d is not None) else None
-            npp_anom = None
-            if flags.enable_npp_anom and "npp_mgC_m3_d" in layers:
-                npp_base = rolling_mean(layers_by_tid, time_ids, tid, "npp_mgC_m3_d", chl7_steps)
-                npp_anom = anomaly(layers["npp_mgC_m3_d"], npp_base)
+                if flags.enable_vertical and all(k in prof_layers for k in ("mld_m", "o2_mmol_m3", "sss_psu")):
+                    mld_sc = score_mld(prof_layers["mld_m"], priors.get("mld_opt_m", 80.0), priors.get("mld_sigma_m", 25.0))
+                    o2_sc = score_o2(prof_layers["o2_mmol_m3"], priors.get("o2_opt_mmol_m3", 200.0), priors.get("o2_sigma_mmol_m3", 5.0), priors.get("o2_min_mmol_m3", 145.0), priors.get("o2_min_softness_mmol_m3", 8.0))
+                    sss_sc = score_sss(prof_layers["sss_psu"], priors.get("sss_opt_psu", 35.0), priors.get("sss_sigma_psu", 0.35))
+                    vert, _ = vertical_access(mld_sc, o2_sc, sss_sc)
+                    thermo = thermocline_proxy(prof_layers["mld_m"], smooth_radius=cfgp["thermo_smooth"])
+                else:
+                    vert = None
+                    thermo = None
 
-            if flags.enable_eddy:
-                vort = compute_vorticity(ucur, vcur)
-                strain = compute_strain(ucur, vcur)
-                ow = compute_okubo_weiss(vort, strain)
-                eke = compute_eke(ucur, vcur)
-                eddy_mask = detect_eddy_mask(ow, ssh)
-                eddy_edge = compute_eddy_edge_distance(eddy_mask)
-            else:
-                vort = strain = ow = eke = eddy_edge = None
+                chl_3d = rolling_mean(layers_by_tid, time_ids, tid, "chl_mg_m3", chl3_steps)
+                if profile_name == "light":
+                    chl_3d = _profile_array(chl_3d, "chl_mg_m3", "light")
+                chl_7d = rolling_mean(layers_by_tid, time_ids, tid, "chl_mg_m3", chl7_steps) if flags.enable_chl_7d else None
+                if chl_7d is not None and profile_name == "light":
+                    chl_7d = _profile_array(chl_7d, "chl_mg_m3", "light")
+                chl_anom = anomaly(chl, chl_7d) if (flags.enable_chl_anom and chl_7d is not None) else None
+                npp_anom = None
+                if flags.enable_npp_anom and "npp_mgC_m3_d" in prof_layers:
+                    npp_base = rolling_mean(layers_by_tid, time_ids, tid, "npp_mgC_m3_d", chl7_steps)
+                    if profile_name == "light":
+                        npp_base = _profile_array(npp_base, "npp_mgC_m3_d", "light")
+                    npp_anom = anomaly(prof_layers["npp_mgC_m3_d"], npp_base)
 
-            ws, wd = wind_speed_dir(layers["wind_u10_m_s"], layers["wind_v10_m_s"])
-            inputs = HabitatInputs(
-                sst_c=sst,
-                chl_mg_m3=chl,
-                current_m_s=cur,
-                waves_hs_m=waves,
-                ssh_m=ssh,
-                front_fused=front_fused,
-                eke=eke,
-                vorticity=vort if flags.write_extended_layers else None,
-                strain=strain if flags.write_extended_layers else None,
-                okubo_weiss=ow,
-                eddy_edge_distance=eddy_edge,
-                vertical_access=vert,
-                chl_3d_mean=chl_3d,
-                chl_7d_mean=chl_7d,
-                chl_anom=chl_anom,
-                npp_anom=npp_anom,
-                thermocline_proxy=thermo,
-                mld_m=layers.get("mld_m"),
-                o2_mmol_m3=layers.get("o2_mmol_m3"),
-                sss_psu=layers.get("sss_psu"),
-            )
-            phab, _ = habitat_scoring(inputs, priors=priors, weights=weights)
-            pops = ops_feasibility(cur, waves, ops_priors, gear_depth_m=10.0, wind_speed_m_s=ws)
-            pcatch = np.clip(phab * pops, 0.0, 1.0).astype(np.float32)
-            front_mult = np.clip(0.92 + 0.18 * np.power(np.clip(front_fused, 0.0, 1.0), 1.10), 0.90, 1.12).astype(np.float32)
-            phab_frontplus = np.clip(phab * front_mult, 0.0, 1.0).astype(np.float32)
-            frontplus = np.clip(phab_frontplus * pops, 0.0, 1.0).astype(np.float32)
-            ens = _safe_nanmean_stack(np.stack([pcatch, frontplus], axis=0)).astype(np.float32)
-            agree, spread = ensemble_stats([pcatch, frontplus])
+                if flags.enable_eddy:
+                    vort = compute_vorticity(ucur, vcur, smooth_radius=cfgp["uv_smooth"])
+                    strain = compute_strain(ucur, vcur, smooth_radius=cfgp["uv_smooth"])
+                    ow = compute_okubo_weiss(vort, strain)
+                    eke = compute_eke(ucur, vcur, smooth_radius=cfgp["uv_smooth"])
+                    eddy_mask = detect_eddy_mask(ow, ssh)
+                    eddy_edge = compute_eddy_edge_distance(eddy_mask)
+                else:
+                    vort = strain = ow = eke = eddy_edge = None
+
+                ws, wd = wind_speed_dir(prof_layers["wind_u10_m_s"], prof_layers["wind_v10_m_s"])
+                inputs = HabitatInputs(
+                    sst_c=sst,
+                    chl_mg_m3=chl,
+                    current_m_s=cur,
+                    waves_hs_m=waves,
+                    ssh_m=ssh,
+                    front_fused=front_fused,
+                    eke=eke,
+                    vorticity=vort if flags.write_extended_layers else None,
+                    strain=strain if flags.write_extended_layers else None,
+                    okubo_weiss=ow,
+                    eddy_edge_distance=eddy_edge,
+                    vertical_access=vert,
+                    chl_3d_mean=chl_3d,
+                    chl_7d_mean=chl_7d,
+                    chl_anom=chl_anom,
+                    npp_anom=npp_anom,
+                    thermocline_proxy=thermo,
+                    mld_m=prof_layers.get("mld_m"),
+                    o2_mmol_m3=prof_layers.get("o2_mmol_m3"),
+                    sss_psu=prof_layers.get("sss_psu"),
+                )
+                phab, _ = habitat_scoring(inputs, priors=priors, weights=weights)
+                pops = ops_feasibility(cur, waves, ops_priors, gear_depth_m=10.0, wind_speed_m_s=ws)
+                pcatch = np.clip(phab * pops, 0.0, 1.0).astype(np.float32)
+                front_mult = np.clip(0.96 + cfgp["frontplus_gain"] * front_fused, 0.94, 1.10).astype(np.float32)
+                phab_frontplus = np.clip(phab * front_mult, 0.0, 1.0).astype(np.float32)
+                frontplus = np.clip(phab_frontplus * pops, 0.0, 1.0).astype(np.float32)
+                ens = _safe_nanmean_stack(np.stack([pcatch, frontplus], axis=0)).astype(np.float32)
+                agree, spread = ensemble_stats([pcatch, frontplus])
+                profile_outputs[profile_name] = {
+                    "pcatch_scoring": pcatch,
+                    "pcatch_frontplus": frontplus,
+                    "pcatch_ensemble": ens,
+                    "phab_scoring": phab,
+                    "phab_frontplus": phab_frontplus,
+                    "front": front_fused,
+                    "pops": pops,
+                    "agree": agree,
+                    "spread": spread,
+                    "sst": sst.astype(np.float32),
+                    "chl": chl.astype(np.float32),
+                    "current": cur.astype(np.float32),
+                    "waves": waves.astype(np.float32),
+                    "conf": prof_layers["conf"],
+                    "qc_chl": prof_layers["qc_chl"],
+                }
 
             tdir.mkdir(parents=True, exist_ok=True)
-            write_bin_f32(tdir / "pcatch_scoring_f32.bin", pcatch)
-            write_bin_f32(tdir / "pcatch_frontplus_f32.bin", frontplus)
-            write_bin_f32(tdir / "pcatch_ensemble_f32.bin", ens)
-            write_bin_f32(tdir / "phab_f32.bin", phab)
-            write_bin_f32(tdir / "phab_frontplus_f32.bin", phab_frontplus)
-            write_bin_f32(tdir / "pops_f32.bin", pops)
-            write_bin_f32(tdir / "agree_f32.bin", agree)
-            write_bin_f32(tdir / "spread_f32.bin", spread)
-            write_bin_f32(tdir / "front_f32.bin", front_fused)
-            write_bin_f32(tdir / "sst_f32.bin", sst.astype(np.float32))
-            write_bin_f32(tdir / "chl_f32.bin", chl.astype(np.float32))
-            write_bin_f32(tdir / "current_f32.bin", cur.astype(np.float32))
-            write_bin_f32(tdir / "waves_f32.bin", waves.astype(np.float32))
-            write_bin_u8(tdir / "qc_chl_u8.bin", layers["qc_chl"])
-            write_bin_f32(tdir / "conf_f32.bin", layers["conf"])
-            write_json(version_marker, {"quality_fix_version": QUALITY_FIX_VERSION, "spatial_hash": spatial_hash})
+            light = profile_outputs["light"]
+            for profile_name, payload in profile_outputs.items():
+                write_bin_f32(tdir / f"pcatch_scoring_{profile_name}_f32.bin", payload["pcatch_scoring"])
+                write_bin_f32(tdir / f"pcatch_frontplus_{profile_name}_f32.bin", payload["pcatch_frontplus"])
+                write_bin_f32(tdir / f"pcatch_ensemble_{profile_name}_f32.bin", payload["pcatch_ensemble"])
+                write_bin_f32(tdir / f"phab_scoring_{profile_name}_f32.bin", payload["phab_scoring"])
+                write_bin_f32(tdir / f"phab_frontplus_{profile_name}_f32.bin", payload["phab_frontplus"])
+                write_bin_f32(tdir / f"front_{profile_name}_f32.bin", payload["front"])
+            # backward-compatible aliases point to the light profile
+            write_bin_f32(tdir / "pcatch_scoring_f32.bin", light["pcatch_scoring"])
+            write_bin_f32(tdir / "pcatch_frontplus_f32.bin", light["pcatch_frontplus"])
+            write_bin_f32(tdir / "pcatch_ensemble_f32.bin", light["pcatch_ensemble"])
+            write_bin_f32(tdir / "phab_f32.bin", light["phab_scoring"])
+            write_bin_f32(tdir / "phab_frontplus_f32.bin", light["phab_frontplus"])
+            write_bin_f32(tdir / "pops_f32.bin", light["pops"])
+            write_bin_f32(tdir / "agree_f32.bin", light["agree"])
+            write_bin_f32(tdir / "spread_f32.bin", light["spread"])
+            write_bin_f32(tdir / "front_f32.bin", light["front"])
+            write_bin_f32(tdir / "sst_f32.bin", light["sst"])
+            write_bin_f32(tdir / "chl_f32.bin", light["chl"])
+            write_bin_f32(tdir / "current_f32.bin", light["current"])
+            write_bin_f32(tdir / "waves_f32.bin", light["waves"])
+            write_bin_u8(tdir / "qc_chl_u8.bin", light["qc_chl"])
+            write_bin_f32(tdir / "conf_f32.bin", light["conf"])
+
+            write_json(version_marker, {"quality_fix_version": QUALITY_FIX_VERSION, "spatial_hash": spatial_hash, "profiles": ["light", "native"]})
 
             if flags.write_extended_layers:
                 if eke is not None:
