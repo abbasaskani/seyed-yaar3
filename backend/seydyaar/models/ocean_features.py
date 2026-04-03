@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 from typing import Dict, Sequence
 import math
 import numpy as np
@@ -72,7 +73,6 @@ def robust_normalize(
 
 
 def box_mean(arr: np.ndarray, radius: int = 1) -> np.ndarray:
-    """NaN-aware 2D box mean using integral images."""
     a = np.asarray(arr, dtype=np.float32)
     r = max(int(radius), 0)
     if r == 0:
@@ -95,7 +95,7 @@ def box_mean(arr: np.ndarray, radius: int = 1) -> np.ndarray:
     return out.astype(np.float32)
 
 
-def nan_gaussian_like(arr: np.ndarray, radius: int = 1, passes: int = 2) -> np.ndarray:
+def nan_gaussian_like(arr: np.ndarray, radius: int = 1, passes: int = 1) -> np.ndarray:
     out = np.asarray(arr, dtype=np.float32)
     r = max(int(radius), 0)
     p = max(int(passes), 1)
@@ -106,25 +106,28 @@ def nan_gaussian_like(arr: np.ndarray, radius: int = 1, passes: int = 2) -> np.n
     return out.astype(np.float32)
 
 
+def fill_missing_local(arr: np.ndarray, radius: int = 1, passes: int = 1) -> np.ndarray:
+    out = np.asarray(arr, dtype=np.float32).copy()
+    for _ in range(max(int(passes), 1)):
+        miss = ~np.isfinite(out)
+        if not np.any(miss):
+            break
+        filled = box_mean(out, radius=max(int(radius), 1))
+        out[miss] = filled[miss]
+    return out.astype(np.float32)
+
+
 def destripe_axis_banding(
     arr: np.ndarray,
-    strength: float = 0.20,
+    strength: float = 0.12,
     smooth_radius: int = 8,
-    support_frac: float = 0.80,
+    support_frac: float = 0.85,
 ) -> np.ndarray:
-    """Conservative axis-banding suppression.
-
-    Only remove row/column offsets when they are broad and nearly uniform across most of the
-    row/column. This avoids the earlier failure mode where one local anomaly changed the whole
-    row median/column median and then got painted across the raster.
-    """
     a = np.asarray(arr, dtype=np.float32)
     valid = np.isfinite(a)
     if not np.any(valid) or min(a.shape) < 8 or float(strength) <= 0.0:
         return a.astype(np.float32, copy=True)
-
-    sr = max(int(smooth_radius), 2)
-    base = nan_gaussian_like(a, radius=max(1, sr // 3), passes=2)
+    base = nan_gaussian_like(a, radius=max(1, int(smooth_radius) // 3), passes=1)
     resid = a - base
     resid[~valid] = np.nan
     finite = resid[np.isfinite(resid)]
@@ -133,7 +136,6 @@ def destripe_axis_banding(
     global_mad = float(np.nanmedian(np.abs(finite - np.nanmedian(finite))))
     if not np.isfinite(global_mad) or global_mad <= 1e-6:
         return a.astype(np.float32, copy=True)
-
     h, w = a.shape
     row_shift = np.zeros((h,), dtype=np.float32)
     for y in range(h):
@@ -155,10 +157,9 @@ def destripe_axis_banding(
         mad = float(np.nanmedian(np.abs(vv[ok] - med)))
         if abs(med) > 2.5 * global_mad and mad < 0.65 * global_mad:
             col_shift[x] = np.float32(med)
-
     if not np.any(row_shift) and not np.any(col_shift):
         return a.astype(np.float32, copy=True)
-
+    sr = max(int(smooth_radius), 2)
     row_shift = np.where(np.abs(row_shift) > 0.0, row_shift - _smooth1d_nan(row_shift, sr), 0.0).astype(np.float32)
     col_shift = np.where(np.abs(col_shift) > 0.0, col_shift - _smooth1d_nan(col_shift, sr), 0.0).astype(np.float32)
     band = row_shift[:, None] + col_shift[None, :]
@@ -167,46 +168,38 @@ def destripe_axis_banding(
     return out.astype(np.float32)
 
 
-def gradient_magnitude(arr: np.ndarray) -> np.ndarray:
+def gradient_magnitude(arr: np.ndarray, denoise_radius: int = 0) -> np.ndarray:
     a = np.asarray(arr, dtype=np.float32)
     valid = np.isfinite(a)
     if not np.any(valid):
         return np.zeros_like(a, dtype=np.float32)
     fill = float(np.nanmedian(a[valid]))
     aa = _nan_to_num(a, fill=fill)
-    # keep gradients sharp; only the faintest denoise to suppress pixel noise
-    aa = nan_gaussian_like(aa, radius=1, passes=1) if float(np.nanstd(a[valid])) > 0.0 else aa
+    if int(denoise_radius) > 0:
+        aa = nan_gaussian_like(aa, radius=int(denoise_radius), passes=1)
     gy, gx = np.gradient(aa.astype(np.float32))
     out = np.sqrt(gx * gx + gy * gy).astype(np.float32)
     out[~valid] = np.nan
     return out
 
 
-def boa_front(arr: np.ndarray, denoise_radius: int = 1, background_radius: int = 3) -> np.ndarray:
-    """BOA-inspired front detector without aggressive destriping.
-
-    Keep the operation local: light denoise, broader background subtraction, gradient, then
-    a gentle normalize. This avoids painting one anomalous row/column across the field.
-    """
+def boa_front(arr: np.ndarray, denoise_radius: int = 0, background_radius: int = 3, normalize_lo: float = 20.0, normalize_hi: float = 95.0) -> np.ndarray:
     a = np.asarray(arr, dtype=np.float32)
     valid = np.isfinite(a)
     if not np.any(valid):
         return np.zeros_like(a, dtype=np.float32)
-    sm = nan_gaussian_like(a, radius=max(denoise_radius, 1), passes=1)
-    bg = nan_gaussian_like(sm, radius=max(background_radius, 2), passes=1)
+    sm = nan_gaussian_like(a, radius=max(int(denoise_radius), 1), passes=1) if int(denoise_radius) > 0 else a
+    bg = nan_gaussian_like(sm, radius=max(int(background_radius), 2), passes=1)
     anom = sm - bg
-    front = gradient_magnitude(anom)
-    # do not blur the detected front itself; preserve local edge sharpness
-    out = robust_normalize(front, lo_q=20.0, hi_q=95.0, min_span=5e-4)
-    return out.astype(np.float32)
+    front = gradient_magnitude(anom, denoise_radius=0)
+    return robust_normalize(front, lo_q=normalize_lo, hi_q=normalize_hi, min_span=5e-4).astype(np.float32)
 
 
 def front_persistence(front_stack: Sequence[np.ndarray]) -> np.ndarray:
     if not front_stack:
         raise ValueError("front_stack must not be empty")
     stack = np.stack([np.asarray(x, dtype=np.float32) for x in front_stack], axis=0)
-    out = _safe_nanmean_stack(stack)
-    return out.astype(np.float32)
+    return _safe_nanmean_stack(stack).astype(np.float32)
 
 
 def fuse_fronts(
@@ -217,8 +210,7 @@ def fuse_fronts(
     front_persist_7d: np.ndarray | None,
     weights: Dict[str, float] | None = None,
 ) -> np.ndarray:
-    # SST is the cleanest signal at the current resolutions; CHL/SSH are retained but gently.
-    default_w = {"sst": 0.50, "chl": 0.18, "ssh": 0.18, "persist_3d": 0.10, "persist_7d": 0.04}
+    default_w = {"sst": 0.36, "chl": 0.38, "ssh": 0.18, "persist_3d": 0.06, "persist_7d": 0.02}
     w = dict(default_w)
     if weights:
         w.update(weights)
@@ -237,49 +229,52 @@ def fuse_fronts(
         weight = max(float(w.get(key, 0.0)), 0.0)
         if weight <= 0.0:
             continue
-        clean = np.asarray(arr, np.float32)
-        out += weight * clean
+        out += weight * np.asarray(arr, np.float32)
         total += weight
     if total <= 0.0:
         return robust_normalize(front_boa_sst)
-    out = out / total
-    return robust_normalize(out, lo_q=18.0, hi_q=96.0, min_span=5e-4)
+    return robust_normalize(out / total, lo_q=15.0, hi_q=95.0, min_span=5e-4)
 
 
-def compute_eke(u: np.ndarray, v: np.ndarray) -> np.ndarray:
-    uu = nan_gaussian_like(np.asarray(u, np.float32), radius=1, passes=1)
-    vv = nan_gaussian_like(np.asarray(v, np.float32), radius=1, passes=1)
+def compute_eke(u: np.ndarray, v: np.ndarray, smooth_radius: int = 0) -> np.ndarray:
+    uu = np.asarray(u, np.float32)
+    vv = np.asarray(v, np.float32)
+    if int(smooth_radius) > 0:
+        uu = nan_gaussian_like(uu, radius=int(smooth_radius), passes=1)
+        vv = nan_gaussian_like(vv, radius=int(smooth_radius), passes=1)
     uu_a = uu - nan_gaussian_like(uu, radius=2, passes=1)
     vv_a = vv - nan_gaussian_like(vv, radius=2, passes=1)
-    out = (0.5 * (uu_a * uu_a + vv_a * vv_a)).astype(np.float32)
-    return out.astype(np.float32)
+    return (0.5 * (uu_a * uu_a + vv_a * vv_a)).astype(np.float32)
 
 
-def compute_vorticity(u: np.ndarray, v: np.ndarray) -> np.ndarray:
-    uu = nan_gaussian_like(_nan_to_num(u), radius=1, passes=1)
-    vv = nan_gaussian_like(_nan_to_num(v), radius=1, passes=1)
+def compute_vorticity(u: np.ndarray, v: np.ndarray, smooth_radius: int = 0) -> np.ndarray:
+    uu = _nan_to_num(u)
+    vv = _nan_to_num(v)
+    if int(smooth_radius) > 0:
+        uu = nan_gaussian_like(uu, radius=int(smooth_radius), passes=1)
+        vv = nan_gaussian_like(vv, radius=int(smooth_radius), passes=1)
     du_dy, du_dx = np.gradient(uu)
     dv_dy, dv_dx = np.gradient(vv)
-    out = (dv_dx - du_dy).astype(np.float32)
-    return out.astype(np.float32)
+    return (dv_dx - du_dy).astype(np.float32)
 
 
-def compute_strain(u: np.ndarray, v: np.ndarray) -> np.ndarray:
-    uu = nan_gaussian_like(_nan_to_num(u), radius=1, passes=1)
-    vv = nan_gaussian_like(_nan_to_num(v), radius=1, passes=1)
+def compute_strain(u: np.ndarray, v: np.ndarray, smooth_radius: int = 0) -> np.ndarray:
+    uu = _nan_to_num(u)
+    vv = _nan_to_num(v)
+    if int(smooth_radius) > 0:
+        uu = nan_gaussian_like(uu, radius=int(smooth_radius), passes=1)
+        vv = nan_gaussian_like(vv, radius=int(smooth_radius), passes=1)
     du_dy, du_dx = np.gradient(uu)
     dv_dy, dv_dx = np.gradient(vv)
     s1 = du_dx - dv_dy
     s2 = dv_dx + du_dy
-    out = np.sqrt(s1 * s1 + s2 * s2).astype(np.float32)
-    return out.astype(np.float32)
+    return np.sqrt(s1 * s1 + s2 * s2).astype(np.float32)
 
 
 def compute_okubo_weiss(vorticity: np.ndarray, strain: np.ndarray) -> np.ndarray:
     vort = np.asarray(vorticity, np.float32)
     st = np.asarray(strain, np.float32)
-    out = (st * st - vort * vort).astype(np.float32)
-    return out.astype(np.float32)
+    return (st * st - vort * vort).astype(np.float32)
 
 
 def detect_eddy_mask(okubo_weiss: np.ndarray, ssh: np.ndarray | None = None) -> np.ndarray:
@@ -332,7 +327,7 @@ def distance_to_mask(mask: np.ndarray) -> np.ndarray:
 
 
 def compute_eddy_edge_distance(mask: np.ndarray) -> np.ndarray:
-    return robust_normalize(distance_to_mask(mask > 0))
+    return robust_normalize(distance_to_mask(mask > 0), lo_q=5.0, hi_q=95.0, min_span=1e-4)
 
 
 def rolling_mean(layers_by_tid: Dict[str, Dict[str, np.ndarray]], ordered_time_ids: Sequence[str], current_tid: str, key: str, window_steps: int) -> np.ndarray:
@@ -340,43 +335,18 @@ def rolling_mean(layers_by_tid: Dict[str, Dict[str, np.ndarray]], ordered_time_i
     lo = max(0, idx - max(int(window_steps), 1) + 1)
     tids = ordered_time_ids[lo:idx + 1]
     stack = [np.asarray(layers_by_tid[tid][key], np.float32) for tid in tids if key in layers_by_tid[tid]]
-    return _safe_nanmean_stack(np.stack(stack, axis=0)).astype(np.float32) if stack else np.asarray(layers_by_tid[current_tid][key], np.float32)
+    return _safe_nanmean_stack(np.stack(stack, axis=0)) if stack else np.asarray(layers_by_tid[current_tid][key], np.float32)
 
 
 def anomaly(arr: np.ndarray, baseline: np.ndarray) -> np.ndarray:
-    return robust_normalize(np.asarray(arr, np.float32) - np.asarray(baseline, np.float32))
+    return robust_normalize(np.asarray(arr, np.float32) - np.asarray(baseline, np.float32), lo_q=10.0, hi_q=90.0, min_span=1e-4)
 
 
-def score_mld(mld: np.ndarray) -> np.ndarray:
-    x = np.asarray(mld, np.float32)
-    valid = np.isfinite(x)
-    if not np.any(valid):
-        return np.zeros_like(x, dtype=np.float32)
-    med = float(np.nanmedian(x))
-    sig = float(max(np.nanstd(x), 5.0))
-    out = np.exp(-0.5 * ((x - med) / sig) ** 2)
-    return robust_normalize(out)
-
-
-def score_o2(o2: np.ndarray) -> np.ndarray:
-    return robust_normalize(np.asarray(o2, np.float32))
-
-
-def score_sss(sss: np.ndarray) -> np.ndarray:
-    x = np.asarray(sss, np.float32)
-    valid = np.isfinite(x)
-    if not np.any(valid):
-        return np.zeros_like(x, dtype=np.float32)
-    mu = float(np.nanmedian(x))
-    sig = float(max(np.nanstd(x), 0.25))
-    out = np.exp(-0.5 * ((x - mu) / sig) ** 2)
-    return robust_normalize(out)
-
-
-def vertical_access(mld: np.ndarray, o2: np.ndarray, sss: np.ndarray) -> tuple[np.ndarray, Dict[str, np.ndarray]]:
-    smld = score_mld(mld)
-    so2 = score_o2(o2)
-    ssss = score_sss(sss)
+def vertical_access(mld: np.ndarray, o2_score: np.ndarray, sss_score: np.ndarray) -> tuple[np.ndarray, Dict[str, np.ndarray]]:
+    # Here mld/o2/sss are expected to be already scored into 0..1 when passed from the pipeline.
+    smld = np.asarray(mld, np.float32)
+    so2 = np.asarray(o2_score, np.float32)
+    ssss = np.asarray(sss_score, np.float32)
     out = np.clip(0.35 * smld + 0.45 * so2 + 0.20 * ssss, 0.0, 1.0).astype(np.float32)
     return out, {"mld_score": smld, "o2_score": so2, "sss_score": ssss}
 
@@ -397,12 +367,8 @@ def wind_penalty(speed: np.ndarray, soft_min: float = 5.0, soft_max: float = 12.
     return np.clip(out, 0.0, 1.0).astype(np.float32)
 
 
-def thermocline_proxy(mld: np.ndarray) -> np.ndarray:
+def thermocline_proxy(mld: np.ndarray, smooth_radius: int = 0) -> np.ndarray:
     x = np.asarray(mld, np.float32)
-    valid = np.isfinite(x)
-    if not np.any(valid):
-        return np.zeros_like(x, dtype=np.float32)
-    med = float(np.nanmedian(x))
-    sig = float(max(np.nanstd(x), 5.0))
-    out = np.exp(-0.5 * ((x - med) / sig) ** 2)
-    return robust_normalize(out)
+    if int(smooth_radius) > 0:
+        x = nan_gaussian_like(x, radius=int(smooth_radius), passes=1)
+    return x.astype(np.float32)
