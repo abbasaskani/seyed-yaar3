@@ -160,6 +160,7 @@ const state = {
   model: localStorage.getItem("model") || "scoring",
   map: localStorage.getItem("map") || "phab",
   agg: localStorage.getItem("agg") || "p90",
+  procProfile: localStorage.getItem("procProfile") || "light",
   times: [],
   t0: null,
   t1: null,
@@ -1270,13 +1271,15 @@ async function scanTimeIdsFromTimesDir(){
 function currentPerTimeKey(){
   const mapKey = $("mapSelect")?.value || "phab";
   const modelKey = $("modelSelect")?.value || "scoring";
-  if(mapKey==="pcatch") return `pcatch_${modelKey}`;
-  if(mapKey==="phab") return (modelKey==="frontplus") ? "phab_frontplus" : "phab_scoring";
+  const profile = $("procProfileSelect")?.value || state.procProfile || "light";
+  if(mapKey==="pcatch") return `pcatch_${modelKey}_${profile}`;
+  if(mapKey==="phab") return (modelKey==="frontplus") ? `phab_frontplus_${profile}` : `phab_scoring_${profile}`;
+  if(mapKey==="front") return `front_${profile}`;
   if(mapKey==="pops") return "pops";
   if(mapKey==="agree") return "agree";
   if(mapKey==="spread") return "spread";
   if(mapKey==="conf") return "conf";
-  return "phab_scoring";
+  return `phab_scoring_${profile}`;
 }
 
 async function filterTimeIdsByExistingLayer(timeIds){
@@ -1392,7 +1395,7 @@ function scheduleAnalyze(){
   }, 320);
 }
 
-["gridToggle","avgToggle","aoiMode","clusterThreshold","clusterEpsKm","clusterMinPts","stepSelect","aggSelect","mapSelect","modelSelect"].forEach(id=>{
+["gridToggle","avgToggle","aoiMode","clusterThreshold","clusterEpsKm","clusterMinPts","stepSelect","aggSelect","mapSelect","modelSelect","procProfileSelect"].forEach(id=>{
   $(id)?.addEventListener("change", ()=>{ 
     if(id==="gridToggle"){ drawGrid05(); }
     scheduleAnalyze();
@@ -2170,6 +2173,7 @@ async function loadSpeciesMetaAndInit(){
   $("modelSelect").value = state.model;
   $("mapSelect").value = state.map;
   $("aggSelect").value = state.agg;
+  if($("procProfileSelect")) $("procProfileSelect").value = state.procProfile || "light";
 
   // Per‑species lookback memory (each species can have its own averaging window)
   try{
@@ -2256,13 +2260,14 @@ async function loadSpeciesMetaAndInit(){
 /* ------------------------------
    UI events
 ------------------------------ */
-["speciesSelect","modelSelect","mapSelect","aggSelect","t0Select","t1Select"].forEach(id=>{
+["speciesSelect","modelSelect","mapSelect","aggSelect","procProfileSelect","t0Select","t1Select"].forEach(id=>{
   $(id).addEventListener("change", async ()=>{
     const prevSpecies = state.species;
     state.species = $("speciesSelect").value;
     state.model = $("modelSelect").value;
     state.map = $("mapSelect").value;
     state.agg = $("aggSelect").value;
+    state.procProfile = $("procProfileSelect")?.value || "light";
 
     // if species changed, reload meta (different profile + files)
     if(id==="speciesSelect"){
