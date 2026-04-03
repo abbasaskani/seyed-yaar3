@@ -5,110 +5,132 @@
       "fa": "اسکیپ‌جک"
     },
     "scientific_name": "Katsuwonus pelamis",
-    "region": "W Arabian Sea",
+    "region": "Western Indian Ocean / Arabian Sea",
+    "evidence_mode": "surface_gillnet_mixed",
     "priors": {
-      "sst_opt_c": 28.0,
-      "sst_sigma_c": 3.0,
-      "chl_opt_mg_m3": 0.2,
-      "chl_sigma_log10": 0.6,
-      "current_opt_m_s": 0.4,
-      "current_sigma_m_s": 0.25,
+      "sst_opt_c": 27.65,
+      "sst_sigma_c": 1.125,
+      "chl_opt_mg_m3": 0.25,
+      "chl_sigma_log10": 0.35,
+      "current_opt_m_s": 0.34,
+      "current_sigma_m_s": 0.13,
+      "mld_opt_m": 91.0,
+      "mld_sigma_m": 31.5,
+      "o2_opt_mmol_m3": 202.5,
+      "o2_sigma_mmol_m3": 3.25,
+      "o2_min_mmol_m3": 145.0,
+      "o2_min_softness_mmol_m3": 8.0,
+      "sss_opt_psu": 35.05,
+      "sss_sigma_psu": 0.325,
+      "thermocline_opt_m": 91.0,
+      "thermocline_sigma_m": 31.5,
       "waves_hs_soft_max_m": 1.5,
       "wind_soft_min_m_s": 5.0,
       "wind_soft_max_m_s": 12.0,
       "front_weights": {
-        "temp": 0.5,
-        "chl": 0.25,
-        "ssh": 0.25
+        "temp": 0.4,
+        "chl": 0.4,
+        "ssh": 0.2
       },
       "front_fusion_weights": {
-        "sst": 0.42,
-        "chl": 0.24,
+        "sst": 0.36,
+        "chl": 0.38,
         "ssh": 0.18,
-        "persist_3d": 0.1,
-        "persist_7d": 0.06
+        "persist_3d": 0.06,
+        "persist_7d": 0.02
       }
     },
     "layer_weights": {
-      "temp": 0.18,
-      "chl": 0.14,
-      "front": 0.18,
-      "current": 0.08,
+      "temp": 0.16,
+      "chl": 0.11,
+      "front": 0.14,
+      "current": 0.06,
+      "eke": 0.04,
+      "okubo_weiss": 0.04,
+      "eddy_edge": 0.03,
+      "vertical": 0.08,
+      "mld": 0.09,
+      "o2": 0.09,
+      "sss": 0.04,
+      "chl_3d": 0.03,
+      "chl_7d": 0.02,
+      "chl_anom": 0.0,
+      "npp_anom": 0.02,
+      "thermocline": 0.05
+    },
+    "ops_constraints": {
+      "waves_hs_soft_max_m": 1.5,
+      "currents_soft_max_m_s": 0.6,
+      "wind_soft_min_m_s": 5.0,
+      "wind_soft_max_m_s": 12.0
+    },
+    "notes": "Ranges are literature-informed from WIO ENM envelopes for surface-accessible skipjack. CHL optimum uses the published intermediate threshold (~0.25 mg m-3) rather than the raw arithmetic midpoint of the very wide ENM range. Front/aggregation weights remain heuristic but are balanced to preserve variable influence without letting a single layer dominate."
+  },
+  "yellowfin": {
+    "label": {
+      "en": "Yellowfin tuna",
+      "fa": "یلوفین"
+    },
+    "scientific_name": "Thunnus albacares",
+    "region": "Western Indian Ocean / Arabian Sea",
+    "evidence_mode": "juvenile_surface_gillnet",
+    "priors": {
+      "sst_opt_c": 27.77,
+      "sst_sigma_c": 1.115,
+      "chl_opt_mg_m3": 0.25,
+      "chl_sigma_log10": 0.4,
+      "current_opt_m_s": 0.315,
+      "current_sigma_m_s": 0.1225,
+      "mld_opt_m": 93.5,
+      "mld_sigma_m": 33.25,
+      "o2_opt_mmol_m3": 201.5,
+      "o2_sigma_mmol_m3": 2.75,
+      "o2_min_mmol_m3": 135.0,
+      "o2_min_softness_mmol_m3": 8.0,
+      "sss_opt_psu": 35.05,
+      "sss_sigma_psu": 0.325,
+      "thermocline_opt_m": 93.5,
+      "thermocline_sigma_m": 33.25,
+      "waves_hs_soft_max_m": 1.5,
+      "wind_soft_min_m_s": 5.0,
+      "wind_soft_max_m_s": 12.0,
+      "front_weights": {
+        "temp": 0.35,
+        "chl": 0.45,
+        "ssh": 0.2
+      },
+      "front_fusion_weights": {
+        "sst": 0.34,
+        "chl": 0.4,
+        "ssh": 0.18,
+        "persist_3d": 0.06,
+        "persist_7d": 0.02
+      }
+    },
+    "layer_weights": {
+      "temp": 0.17,
+      "chl": 0.1,
+      "front": 0.14,
+      "current": 0.06,
       "eke": 0.05,
       "okubo_weiss": 0.05,
       "eddy_edge": 0.04,
-      "vertical": 0.06,
-      "mld": 0.05,
-      "o2": 0.05,
+      "vertical": 0.08,
+      "mld": 0.08,
+      "o2": 0.07,
       "sss": 0.03,
       "chl_3d": 0.03,
       "chl_7d": 0.02,
       "chl_anom": 0.0,
       "npp_anom": 0.02,
-      "thermocline": 0.02
+      "thermocline": 0.06
     },
     "ops_constraints": {
       "waves_hs_soft_max_m": 1.5,
-      "currents_soft_max_m_s": 0.9,
+      "currents_soft_max_m_s": 0.6,
       "wind_soft_min_m_s": 5.0,
       "wind_soft_max_m_s": 12.0
     },
-    "notes": "Precision-balanced defaults: sharper habitat fields, direct upper-ocean variables enabled for skipjack, fronts remain important but no longer dominate habitat texture."
-  },
-  "yellowfin": {
-    "label": {
-      "en": "Yellowfin tuna",
-      "fa": "یلّوفین"
-    },
-    "scientific_name": "Thunnus albacares",
-    "region": "W Arabian Sea",
-    "priors": {
-      "sst_opt_c": 27.0,
-      "sst_sigma_c": 3.5,
-      "chl_opt_mg_m3": 0.15,
-      "chl_sigma_log10": 0.65,
-      "current_opt_m_s": 0.35,
-      "current_sigma_m_s": 0.25,
-      "waves_hs_soft_max_m": 1.5,
-      "wind_soft_min_m_s": 5.0,
-      "wind_soft_max_m_s": 12.0,
-      "front_weights": {
-        "temp": 0.5,
-        "chl": 0.25,
-        "ssh": 0.25
-      },
-      "front_fusion_weights": {
-        "sst": 0.32,
-        "chl": 0.28,
-        "ssh": 0.2,
-        "persist_3d": 0.12,
-        "persist_7d": 0.08
-      }
-    },
-    "layer_weights": {
-      "temp": 0.23,
-      "chl": 0.16,
-      "front": 0.23,
-      "current": 0.1,
-      "eke": 0.05,
-      "okubo_weiss": 0.07,
-      "eddy_edge": 0.05,
-      "vertical": 0.06,
-      "mld": 0.0,
-      "o2": 0.0,
-      "sss": 0.0,
-      "chl_3d": 0.03,
-      "chl_7d": 0.01,
-      "chl_anom": 0.0,
-      "npp_anom": 0.0,
-      "thermocline": 0.01
-    },
-    "ops_constraints": {
-      "waves_hs_soft_max_m": 1.5,
-      "currents_soft_max_m_s": 0.8,
-      "wind_soft_min_m_s": 5.0,
-      "wind_soft_max_m_s": 12.0
-    },
-    "notes": "Kept for future use. Lean runtime defaults still run skipjack only unless species is overridden."
+    "notes": "Juvenile surface-accessible yellowfin priors follow the WIO ENM envelope; adult/deeper behavior is not fully captured by this surface-only product. Front emphasis is slightly stronger on chlorophyll fronts because prey aggregation is a key mechanism in the cited habitat literature."
   }
 }
