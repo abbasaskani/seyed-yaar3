@@ -1,6 +1,6 @@
 {
   "quality_fix_version": "2026-04-03-dual-profile-evidence-priors-v1",
-  "spatial_hash": "b523ee731bd6628fcc49c9619838898ba8a07163331dd28e2b5b2923c9d5ca85",
+  "spatial_hash": "a84896b9aaeadd206b32f967926b65ca37090f15db1e0907d46194b1f0524766",
   "profiles": [
     "light",
     "native"
