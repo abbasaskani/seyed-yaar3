@@ -1,0 +1,74 @@
+.coordGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+
+.coordReadout {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.coordReadout > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.coordLabel {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.coordValue {
+  font-weight: 800;
+  text-align: right;
+  word-break: break-word;
+}
+
+.phase1-cluster-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.phase1-cluster-inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.phase1-cluster-inline input[type="range"] {
+  flex: 1 1 120px;
+  min-width: 120px;
+}
+
+.phase1-cluster-inline input[type="number"] {
+  width: 82px;
+}
+
+.phase1-active-pin {
+  box-shadow: 0 0 0 2px rgba(57,255,159,0.6);
+}
+
+@media (max-width: 900px) {
+  .phase1-cluster-inline {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .phase1-cluster-inline input[type="number"] {
+    width: 100%;
+  }
+}
