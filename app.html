@@ -8,11 +8,12 @@
   <meta name="theme-color" content="#03243b" />
   <link rel="icon" href="assets/logo.png" />
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="phase1.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
 
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"
- />
+  />
 </head>
 <body class="ocean appPage">
   <div class="bgPhoto" aria-hidden="true"></div>
@@ -130,6 +131,30 @@
       </div>
 
       <div class="row">
+        <label class="lbl">Location</label>
+        <div class="coordGrid">
+          <input id="gotoLatInput" type="number" step="0.0001" placeholder="Lat" />
+          <input id="gotoLonInput" type="number" step="0.0001" placeholder="Lon" />
+        </div>
+      </div>
+      <div class="row two">
+        <button id="gotoCoordBtn" class="btnGhost">Go to coord</button>
+        <button id="centerSelectedPinBtn" class="btnGhost">Center selected</button>
+      </div>
+      <div class="row">
+        <div class="coordReadout">
+          <div><span class="coordLabel">Lat/Lon</span><span id="coordValue" class="coordValue">—</span></div>
+          <div><span class="coordLabel">DMS</span><span id="coordDms" class="coordValue">—</span></div>
+          <div><span class="coordLabel">Bearing</span><span id="coordBearing" class="coordValue">—</span></div>
+          <div><span class="coordLabel">Local time</span><span id="coordLocalTime" class="coordValue">—</span></div>
+        </div>
+      </div>
+      <div class="row two">
+        <button id="deleteSelectedPinBtn" class="btnGhost">Delete selected pin</button>
+        <button id="clearPinsBtn" class="btnGhost">Clear all pins</button>
+      </div>
+
+      <div class="row">
         <label class="lbl">AOI</label>
         <div class="aoiRow">
           <select id="aoiMode">
@@ -152,11 +177,27 @@
           </select>
 
           <select id="clusterThreshold" title="Minimum probability to include in clustering (current layer)">
-            <option value="90">≥ 90%</option>
-            <option value="85" selected>≥ 85%</option>
-            <option value="80">≥ 80%</option>
-            <option value="75">≥ 75%</option>
+            <option value="0">≥ 0%</option>
+            <option value="5">≥ 5%</option>
+            <option value="10">≥ 10%</option>
+            <option value="15">≥ 15%</option>
+            <option value="20">≥ 20%</option>
+            <option value="25">≥ 25%</option>
+            <option value="30" selected>≥ 30%</option>
+            <option value="35">≥ 35%</option>
+            <option value="40">≥ 40%</option>
+            <option value="45">≥ 45%</option>
+            <option value="50">≥ 50%</option>
+            <option value="55">≥ 55%</option>
+            <option value="60">≥ 60%</option>
+            <option value="65">≥ 65%</option>
             <option value="70">≥ 70%</option>
+            <option value="75">≥ 75%</option>
+            <option value="80">≥ 80%</option>
+            <option value="85">≥ 85%</option>
+            <option value="90">≥ 90%</option>
+            <option value="95">≥ 95%</option>
+            <option value="100">≥ 100%</option>
           </select>
 
           <input id="clusterEpsKm" type="number" min="1" step="1" value="25" title="DBSCAN eps (km)" />
@@ -467,6 +508,7 @@ Example:
 ></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
   <script src="app.js?v=docs-latest-v9"></script>
+  <script src="phase1-tools.js"></script>
   <script>
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js?v=docs-latest-v9');
   </script>
